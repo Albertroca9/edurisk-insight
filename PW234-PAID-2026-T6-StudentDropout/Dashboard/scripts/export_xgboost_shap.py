@@ -38,11 +38,11 @@ def risk_level(probability: float) -> str:
 def action_from_feature(feature_name: str) -> tuple[str, str] | None:
     clean = prettify_feature_name(feature_name)
     rules = [
-        ("Motivation Level", "Tutoria motivacional", "Revisio individual d'objectius, barreres i compromís amb el curs."),
-        ("Attendance", "Seguiment d'assistencia", "Contacte preventiu i pauta setmanal de presencia a classe."),
-        ("Hours Studied", "Pla d'estudi guiat", "Franges concretes d'estudi i revisio de progres cada dues setmanes."),
-        ("Exam Score", "Reforc academic", "Sessions focalitzades en les competències amb pitjor rendiment."),
-        ("Previous Scores", "Reforc academic", "Treballar prerequisits i continguts base abans de noves avaluacions."),
+        ("Motivation Level", "Tutoria motivacional", "Revisió individual d'objectius, barreres i compromís amb el curs."),
+        ("Attendance", "Seguiment d'assistència", "Contacte preventiu i pauta setmanal de presència a classe."),
+        ("Hours Studied", "Pla d'estudi guiat", "Franges concretes d'estudi i revisió de progrés cada dues setmanes."),
+        ("Exam Score", "Reforç acadèmic", "Sessions focalitzades en les competències amb pitjor rendiment."),
+        ("Previous Scores", "Reforç acadèmic", "Treballar prerequisits i continguts base abans de noves avaluacions."),
         ("Access to Resources", "Recursos educatius", "Prioritzar materials, espais d'estudi o suport digital."),
         ("Tutoring Sessions", "Tutories academiques", "Programar seguiment docent estructurat."),
         ("Distance from Home", "Flexibilitat de seguiment", "Valorar barreres logististiques i alternatives de suport."),
@@ -71,11 +71,11 @@ def recommended_actions(top_factors: list[dict], level: str) -> list[dict[str, s
             actions.append(action)
 
     if level == "high":
-        fallback = ("Intervencio prioritaria", "Revisio tutorial, reforc academic i seguiment proper del cas.")
+        fallback = ("Intervenció prioritària", "Revisió tutorial, reforç acadèmic i seguiment proper del cas.")
     elif level == "medium":
-        fallback = ("Seguiment preventiu", "Revisio quinzenal dels indicadors i evolucio del risc.")
+        fallback = ("Seguiment preventiu", "Revisió quinzenal dels indicadors i evolució del risc.")
     else:
-        fallback = ("Monitoritzacio ordinaria", "Mantenir observacio i revisar canvis en el proxim cicle.")
+        fallback = ("Monitorització ordinària", "Mantenir observació i revisar canvis en el pròxim cicle.")
 
     if fallback not in actions:
         actions.append(fallback)
