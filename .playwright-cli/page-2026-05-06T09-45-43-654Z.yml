@@ -1,0 +1,77 @@
+- main [ref=e2]:
+  - complementary "Navegació principal" [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: ID
+      - generic [ref=e6]:
+        - paragraph [ref=e7]: PAID Lab
+        - heading "IDSS Dropout" [level=1] [ref=e8]
+    - navigation [ref=e9]:
+      - button "⌂ Global" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: ⌂
+        - generic [ref=e12]: Global
+      - button "≡ Estudiants" [ref=e13] [cursor=pointer]:
+        - generic [ref=e14]: ≡
+        - generic [ref=e15]: Estudiants
+      - button "◇ Simulador" [ref=e16] [cursor=pointer]:
+        - generic [ref=e17]: ◇
+        - generic [ref=e18]: Simulador
+      - button "＋ Nou alumne" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: ＋
+        - generic [ref=e21]: Nou alumne
+    - generic [ref=e22]:
+      - paragraph [ref=e23]: Prioritat del sistema
+      - strong [ref=e24]: Evitar falsos negatius
+      - generic [ref=e25]: Els casos de risc es mostren amb criteri preventiu per facilitar la revisió docent.
+  - generic [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - paragraph [ref=e29]: Sistema intel·ligent de suport a la decisió
+        - heading "Visió global del risc acadèmic" [level=2] [ref=e30]
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e33]: Cohort
+          - combobox "Cohort" [ref=e34]:
+            - option "Tots els estudiants" [selected]
+            - option "Casos observats amb dropout"
+            - option "Casos observats sense dropout"
+        - button "↻" [ref=e35] [cursor=pointer]
+    - generic [ref=e36]: Carregant dades del repositori...
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - article [ref=e39]:
+          - generic [ref=e40]: Estudiants
+          - strong [ref=e41]: "-"
+          - generic [ref=e42]: registres preprocessats
+        - article [ref=e43]:
+          - generic [ref=e44]: Dropout observat
+          - strong [ref=e45]: "-"
+          - generic [ref=e46]: "-"
+        - article [ref=e47]:
+          - generic [ref=e48]: Risc alt estimat
+          - strong [ref=e49]: "-"
+          - generic [ref=e50]: segons score explicable
+        - article [ref=e51]:
+          - generic [ref=e52]: Explicabilitat
+          - strong [ref=e53]: "-"
+          - generic [ref=e54]: factors locals per estudiant
+      - generic [ref=e55]:
+        - article [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - paragraph [ref=e59]: Priorització docent
+              - heading "Segments que demanen intervenció" [level=3] [ref=e60]
+            - generic [ref=e61]:
+              - text: baix
+              - text: mitjà
+              - text: alt
+          - generic "Priorització docent per segments d'intervenció" [ref=e65]
+          - paragraph [ref=e66]: "Cada barra agrupa estudiants que comparteixen una causa accionable. El color indica el nivell de risc estimat dins del segment: vermell per intervenció prioritària, ambre per seguiment preventiu i verd per monitorització ordinària."
+        - article [ref=e67]:
+          - generic [ref=e69]:
+            - paragraph [ref=e70]: Drivers principals
+            - heading "Factors que expliquen el risc" [level=3] [ref=e71]
+          - paragraph [ref=e72]: Percentatge d'estudiants de la cohort que presenten cada condició. Serveix per veure quines causes són més freqüents abans d'entrar al detall individual.
+      - generic [ref=e75]:
+        - paragraph [ref=e76]: Coordinació
+        - heading "Perfils d'intervenció" [level=3] [ref=e77]
+    - text: ↕ ↕ ↕ ↕ ↕ ↕ ↕

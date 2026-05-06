@@ -358,10 +358,10 @@ function renderPriorityChart() {
     const totalWidth = (segment.total / maxTotal) * plotWidth;
     let x = pad.left;
 
-    ctx.fillStyle = "#17212b";
+    ctx.fillStyle = "#25343c";
     ctx.font = "700 20px Segoe UI";
     ctx.fillText(segment.label, 24, y + 21);
-    ctx.fillStyle = "#617080";
+    ctx.fillStyle = "#61757c";
     ctx.font = "16px Segoe UI";
     ctx.fillText(segment.action, 24, y + 43);
 
@@ -378,21 +378,21 @@ function renderPriorityChart() {
       x += sectionWidth;
     });
 
-    ctx.fillStyle = "#17212b";
+    ctx.fillStyle = "#25343c";
     ctx.font = "800 18px Segoe UI";
     ctx.fillText(`${formatInt(segment.total)}`, width - pad.right + 24, y + 22);
-    ctx.fillStyle = "#617080";
+    ctx.fillStyle = "#61757c";
     ctx.font = "15px Segoe UI";
     ctx.fillText("estudiants", width - pad.right + 24, y + 43);
   });
 
-  ctx.fillStyle = "#617080";
+  ctx.fillStyle = "#61757c";
   ctx.font = "16px Segoe UI";
   ctx.fillText("Nombre d'estudiants per segment i nivell de risc", pad.left, height - 14);
 }
 
 function drawPriorityGrid(ctx, width, height, pad, maxTotal) {
-  ctx.strokeStyle = "#e7edf0";
+  ctx.strokeStyle = "#d9e8e5";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i += 1) {
     const x = pad.left + ((width - pad.left - pad.right) * i) / 4;
@@ -400,11 +400,11 @@ function drawPriorityGrid(ctx, width, height, pad, maxTotal) {
     ctx.moveTo(x, pad.top - 8);
     ctx.lineTo(x, height - pad.bottom);
     ctx.stroke();
-    ctx.fillStyle = "#8a97a3";
+    ctx.fillStyle = "#90a7ac";
     ctx.font = "12px Segoe UI";
     ctx.fillText(formatInt(Math.round((maxTotal * i) / 4)), x - 8, height - 30);
   }
-  ctx.fillStyle = "#617080";
+  ctx.fillStyle = "#61757c";
   ctx.font = "700 13px Segoe UI";
   ctx.fillText("Total", width - pad.right + 24, pad.top - 13);
 }
@@ -644,7 +644,7 @@ function drawGauge(score, level) {
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.arc(w / 2, h - 34, 130, Math.PI, 0);
-  ctx.strokeStyle = "#e8eef2";
+  ctx.strokeStyle = "#e9f2f0";
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(w / 2, h - 34, 130, Math.PI, Math.PI + Math.PI * (score / 100));
@@ -723,9 +723,9 @@ function riskLabel(level) {
 
 function riskColor(level, alpha) {
   const colors = {
-    high: `rgba(201, 59, 59, ${alpha})`,
-    medium: `rgba(216, 138, 19, ${alpha})`,
-    low: `rgba(31, 157, 99, ${alpha})`,
+    high: `rgba(231, 134, 128, ${alpha})`,
+    medium: `rgba(233, 185, 87, ${alpha})`,
+    low: `rgba(124, 200, 145, ${alpha})`,
   };
   return colors[level];
 }
