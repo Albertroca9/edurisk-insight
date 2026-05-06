@@ -164,6 +164,25 @@ select, input[type="search"] {
   cursor: pointer;
 }
 
+.text-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 12px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.text-button:hover {
+  background: var(--soft-panel);
+}
+
+.text-button.secondary {
+  color: var(--muted);
+}
+
 .status-band {
   margin-bottom: 16px;
   padding: 12px 14px;
@@ -544,6 +563,52 @@ tr:hover { background: #f0f8f6; }
   gap: 18px;
 }
 
+.sim-value-grid, .comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sim-value-grid {
+  margin-top: 16px;
+}
+
+.sim-value-grid span,
+.comparison-grid div,
+.decision-note {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft-panel);
+  padding: 11px;
+}
+
+.sim-value-grid strong,
+.comparison-grid span,
+.comparison-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.comparison-grid strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--ink);
+  font-size: 1.45rem;
+}
+
+.simulation-summary {
+  margin: 4px 0 16px;
+}
+
+.decision-tools {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 16px;
+}
+
 .new-student-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -617,6 +682,9 @@ input[type="range"] {
   .side-panel { display: none; }
   .nav-stack { display: flex; }
   .overview-layout, .student-layout, .sim-layout, .new-student-layout, .metric-grid, .intervention-grid, .new-student-form {
+    grid-template-columns: 1fr;
+  }
+  .sim-value-grid, .comparison-grid {
     grid-template-columns: 1fr;
   }
 }

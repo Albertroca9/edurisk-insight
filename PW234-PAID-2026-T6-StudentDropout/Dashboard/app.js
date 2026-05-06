@@ -5,6 +5,8 @@ const state = {
   rows: [],
   filtered: [],
   selected: null,
+  simulationSource: null,
+  currentSimulation: null,
   view: "overview",
   modelMode: "rule",
   sort: { key: "riskScore", direction: "desc" },
@@ -34,11 +36,19 @@ const els = {
   tableCount: document.querySelector("#table-count"),
   detailTitle: document.querySelector("#detail-title"),
   detail: document.querySelector("#student-detail"),
+  simControls: document.querySelector(".sim-controls"),
+  simResultPanel: document.querySelector(".sim-result-panel"),
   simMotivation: document.querySelector("#sim-motivation"),
   simAttendance: document.querySelector("#sim-attendance"),
   simHours: document.querySelector("#sim-hours"),
   simPrevious: document.querySelector("#sim-previous"),
   simExam: document.querySelector("#sim-exam"),
+  simTutoring: document.querySelector("#sim-tutoring"),
+  simResources: document.querySelector("#sim-resources"),
+  simValues: document.querySelector("#sim-values"),
+  simSource: document.querySelector("#sim-source"),
+  simComparison: document.querySelector("#sim-comparison"),
+  exportSimReport: document.querySelector("#export-sim-report"),
   gauge: document.querySelector("#gauge-chart"),
   simScore: document.querySelector("#sim-score"),
   simLevel: document.querySelector("#sim-level"),
@@ -128,6 +138,15 @@ function safeJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function cleanCatalanText(value) {
@@ -578,6 +597,12 @@ function renderStudentExplanation(row, options = {}) {
     ? `Probabilitat XGBoost ${(row.xgbProbability * 100).toFixed(1)}%`
     : row.dropout ? "Dropout observat al dataset" : "Sense dropout observat al dataset");
   const note = options.note || "";
+  const decisionTools = options.hideDecisionTools ? "" : `
+    <div class="decision-tools">
+      <button class="text-button" type="button" data-simulate-id="${escapeHtml(row.id)}">Simular aquest alumne</button>
+      <button class="text-button secondary" type="button" data-export-id="${escapeHtml(row.id)}">Exportar informe</button>
+    </div>
+  `;
   return `
     <div class="detail-score">
       <div class="score-badge" style="background:${riskColor(row.riskLevel, 1)}">${row.riskScore}%</div>
@@ -587,6 +612,7 @@ function renderStudentExplanation(row, options = {}) {
         <span>Motivació ${motivationLabel(row.Motivation_Level)}, assistència ${row.Attendance}%, ${row.Hours_Studied} hores d'estudi.</span>
       </div>
     </div>
+    ${decisionTools}
     ${note ? `<p class="explain-text compact">${note}</p>` : ""}
     <p class="panel-label">Factors principals</p>
     ${renderImpactChart(row.riskFactors)}
@@ -597,24 +623,239 @@ function renderStudentExplanation(row, options = {}) {
   `;
 }
 
-function renderSimulator() {
-  const row = {
+function ensureSimulationUi() {
+  if (!document.querySelector("#sim-tutoring") && els.simControls) {
+    els.simControls.insertAdjacentHTML("beforeend", `
+      <label><span>Tutories</span><input id="sim-tutoring" type="range" min="0" max="10" value="0" /></label>
+      <label><span>Recursos</span><select id="sim-resources"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+    `);
+  }
+  if (!document.querySelector("#sim-values") && els.simControls) {
+    els.simControls.insertAdjacentHTML("afterend", `<div id="sim-values" class="sim-value-grid"></div>`);
+  }
+  if (!document.querySelector("#sim-source") && els.simResultPanel) {
+    els.simResultPanel.insertAdjacentHTML("afterbegin", `
+      <div class="panel-head sim-result-head">
+        <div>
+          <p class="panel-label">Resultat estimat</p>
+          <h3 id="sim-source">Cas manual</h3>
+        </div>
+        <button id="export-sim-report" class="text-button" type="button">Exportar informe</button>
+      </div>
+    `);
+    if (els.simResultPanel.children) {
+      [...els.simResultPanel.children]
+        .filter((child) => child.matches?.(".panel-label"))
+        .forEach((child) => child.remove());
+    }
+  }
+  if (!document.querySelector("#sim-comparison") && els.simActions) {
+    els.simActions.insertAdjacentHTML("beforebegin", `<div id="sim-comparison" class="simulation-summary"></div>`);
+  }
+  els.simTutoring = document.querySelector("#sim-tutoring");
+  els.simResources = document.querySelector("#sim-resources");
+  els.simValues = document.querySelector("#sim-values");
+  els.simSource = document.querySelector("#sim-source");
+  els.simComparison = document.querySelector("#sim-comparison");
+  els.exportSimReport = document.querySelector("#export-sim-report");
+}
+
+function simulationValuesFromControls() {
+  return {
     Motivation_Level: els.simMotivation.value,
     Attendance: Number(els.simAttendance.value),
     Hours_Studied: Number(els.simHours.value),
     Previous_Scores: Number(els.simPrevious.value),
     Exam_Score: Number(els.simExam.value),
-    Tutoring_Sessions: 0,
-    Access_to_Resources: "Medium",
+    Tutoring_Sessions: Number(els.simTutoring?.value || 0),
+    Access_to_Resources: els.simResources?.value || "Medium",
   };
-  const risk = calculateRisk(row);
-  row.riskLevel = risk.level;
-  row.recommendedActions = recommendActions(row);
+}
 
-  els.simScore.textContent = `${risk.score}%`;
-  els.simLevel.textContent = riskLabel(risk.level);
-  els.simActions.innerHTML = row.recommendedActions.map(([title, text]) => `<div class="action-chip"><strong>${title}</strong><span>${text}</span></div>`).join("");
-  drawGauge(risk.score, risk.level);
+function valuesFromStudent(row) {
+  return {
+    Motivation_Level: row.Motivation_Level,
+    Attendance: Number(row.Attendance),
+    Hours_Studied: Number(row.Hours_Studied),
+    Previous_Scores: Number(row.Previous_Scores),
+    Exam_Score: Number(row.Exam_Score),
+    Tutoring_Sessions: Number(row.Tutoring_Sessions || 0),
+    Access_to_Resources: row.Access_to_Resources || "Medium",
+  };
+}
+
+function setSimulationControlsFromRow(row) {
+  ensureSimulationUi();
+  const values = valuesFromStudent(row);
+  els.simMotivation.value = values.Motivation_Level;
+  els.simAttendance.value = values.Attendance;
+  els.simHours.value = values.Hours_Studied;
+  els.simPrevious.value = values.Previous_Scores;
+  els.simExam.value = values.Exam_Score;
+  if (els.simTutoring) els.simTutoring.value = values.Tutoring_Sessions;
+  if (els.simResources) els.simResources.value = values.Access_to_Resources;
+}
+
+function buildSimulationCase(values, source = null) {
+  const simulated = {
+    id: source?.id || "SIM-MANUAL",
+    ...values,
+  };
+  const simulatedRisk = calculateRisk(simulated);
+  simulated.riskScore = simulatedRisk.score;
+  simulated.riskLevel = simulatedRisk.level;
+  simulated.riskFactors = simulatedRisk.factors;
+  simulated.recommendedActions = recommendActions(simulated);
+
+  let original = null;
+  if (source) {
+    const originalRisk = source.riskScore === undefined ? calculateRisk(source) : null;
+    original = {
+      id: source.id,
+      ...valuesFromStudent(source),
+      riskScore: source.riskScore ?? originalRisk.score,
+      riskLevel: source.riskLevel ?? originalRisk.level,
+    };
+  }
+
+  return {
+    id: simulated.id,
+    original,
+    simulated,
+    delta: original ? simulated.riskScore - original.riskScore : null,
+  };
+}
+
+function reportValueRows(values) {
+  return [
+    ["Motivaci&oacute;", values.Motivation_Level],
+    ["Assist&egrave;ncia", `${values.Attendance}%`],
+    ["Hores d'estudi", `${values.Hours_Studied} h`],
+    ["Nota pr&egrave;via", values.Previous_Scores],
+    ["Nota examen", values.Exam_Score],
+    ["Tutories", values.Tutoring_Sessions],
+    ["Recursos", values.Access_to_Resources],
+  ];
+}
+
+function buildCaseReport(simulationCase) {
+  const originalRows = simulationCase.original ? reportValueRows(simulationCase.original) : [];
+  const simulatedRows = reportValueRows(simulationCase.simulated);
+  const delta = simulationCase.delta;
+  const deltaText = delta === null ? "Cas manual sense alumne d'origen" : delta === 0 ? "0 punts" : `${delta > 0 ? "+" : ""}${delta} punts`;
+  const actionItems = simulationCase.simulated.recommendedActions
+    .map(([title, text]) => `<li><strong>${escapeHtml(title)}</strong><br>${escapeHtml(text)}</li>`)
+    .join("");
+  const rowHtml = (rows) => rows.map(([label, value]) => `
+    <tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>
+  `).join("");
+
+  return `<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="utf-8">
+    <title>Informe IDSS ${escapeHtml(simulationCase.id)}</title>
+    <style>
+      body { margin: 32px; color: #25343c; font-family: Segoe UI, Arial, sans-serif; line-height: 1.45; }
+      h1, h2 { margin-bottom: 8px; }
+      .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+      .box { border: 1px solid #d9e8e5; border-radius: 8px; padding: 14px; background: #f7faf9; }
+      .box span { display: block; color: #61757c; font-size: 0.88rem; font-weight: 700; text-transform: uppercase; }
+      .box strong { display: block; margin-top: 6px; font-size: 1.7rem; }
+      table { width: 100%; border-collapse: collapse; margin: 10px 0 22px; }
+      th, td { border-bottom: 1px solid #d9e8e5; padding: 9px; text-align: left; }
+      th { width: 38%; color: #61757c; }
+      li { margin-bottom: 12px; }
+      .note { color: #61757c; }
+    </style>
+  </head>
+  <body>
+    <h1>Informe IDSS d'intervenci&oacute;</h1>
+    <p class="note">Alumne: <strong>${escapeHtml(simulationCase.id)}</strong>. Informe generat des del simulador what-if del dashboard.</p>
+    <section class="summary">
+      <div class="box"><span>Risc original</span><strong>${simulationCase.original ? `${simulationCase.original.riskScore}%` : "-"}</strong></div>
+      <div class="box"><span>Risc simulat</span><strong>${simulationCase.simulated.riskScore}%</strong></div>
+      <div class="box"><span>Difer&egrave;ncia</span><strong>${escapeHtml(deltaText)}</strong></div>
+    </section>
+    ${simulationCase.original ? `<h2>Valors originals</h2><table>${rowHtml(originalRows)}</table>` : ""}
+    <h2>Valors simulats</h2>
+    <table>${rowHtml(simulatedRows)}</table>
+    <h2>Accions recomanades</h2>
+    <ol>${actionItems}</ol>
+  </body>
+</html>`;
+}
+
+function safeFileName(value) {
+  return String(value).replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "cas";
+}
+
+function downloadCaseReport(simulationCase) {
+  const html = buildCaseReport(simulationCase);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `informe-idss-${safeFileName(simulationCase.id)}.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function loadStudentIntoSimulator(row) {
+  state.simulationSource = row;
+  setSimulationControlsFromRow(row);
+  setView("simulator");
+  renderSimulator();
+}
+
+function updateSimulationValueReadout(values) {
+  if (!els.simValues) return;
+  els.simValues.innerHTML = `
+    <span><strong>Assist&egrave;ncia</strong>${values.Attendance}%</span>
+    <span><strong>Hores</strong>${values.Hours_Studied} h</span>
+    <span><strong>Nota pr&egrave;via</strong>${values.Previous_Scores}</span>
+    <span><strong>Examen</strong>${values.Exam_Score}</span>
+    <span><strong>Tutories</strong>${values.Tutoring_Sessions}</span>
+    <span><strong>Recursos</strong>${values.Access_to_Resources}</span>
+  `;
+}
+
+function renderSimulationComparison(simulationCase) {
+  if (!els.simComparison) return;
+  if (!simulationCase.original) {
+    els.simComparison.innerHTML = `
+      <div class="decision-note">
+        Ajusta els valors per estimar el risc i obtenir accions recomanades. Carrega un alumne des de la llista per comparar risc original i risc simulat.
+      </div>
+    `;
+    return;
+  }
+  const delta = simulationCase.delta;
+  const deltaLabel = delta === 0 ? "sense canvi" : `${delta > 0 ? "+" : ""}${delta} punts`;
+  els.simComparison.innerHTML = `
+    <div class="comparison-grid">
+      <div><span>Risc original</span><strong>${simulationCase.original.riskScore}%</strong><small>${riskLabel(simulationCase.original.riskLevel)}</small></div>
+      <div><span>Risc simulat</span><strong>${simulationCase.simulated.riskScore}%</strong><small>${riskLabel(simulationCase.simulated.riskLevel)}</small></div>
+      <div><span>Difer&egrave;ncia</span><strong>${deltaLabel}</strong><small>${delta < 0 ? "reducci&oacute; estimada" : delta > 0 ? "increment estimat" : "mateix nivell"}</small></div>
+    </div>
+  `;
+}
+
+function renderSimulator() {
+  ensureSimulationUi();
+  const values = simulationValuesFromControls();
+  const simulationCase = buildSimulationCase(values, state.simulationSource);
+  state.currentSimulation = simulationCase;
+
+  updateSimulationValueReadout(values);
+  els.simSource.textContent = simulationCase.original ? `Alumne ${simulationCase.id}` : "Cas manual";
+  els.simScore.textContent = `${simulationCase.simulated.riskScore}%`;
+  els.simLevel.textContent = riskLabel(simulationCase.simulated.riskLevel);
+  renderSimulationComparison(simulationCase);
+  els.simActions.innerHTML = simulationCase.simulated.recommendedActions.map(([title, text]) => `<div class="action-chip"><strong>${title}</strong><span>${text}</span></div>`).join("");
+  drawGauge(simulationCase.simulated.riskScore, simulationCase.simulated.riskLevel);
 }
 
 function renderNewStudent() {
@@ -631,6 +872,7 @@ function renderNewStudent() {
   els.newResultTitle.textContent = row.id;
   els.newResult.innerHTML = renderStudentExplanation(row, {
     title: "Risc calculat amb score explicable",
+    hideDecisionTools: true,
     note: "Estimació orientativa: aquest alumne no s'afegeix al CSV ni reentrena el model, només aplica les regles transparents del dashboard.",
   });
 }
@@ -730,15 +972,19 @@ function riskColor(level, alpha) {
   return colors[level];
 }
 
+function setView(view) {
+  state.view = view;
+  els.nav.forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  els.views.forEach((item) => item.classList.toggle("active", item.id === `${view}-view`));
+  els.title.textContent = viewTitles[view];
+  if (view === "simulator") renderSimulator();
+  if (view === "new-student") renderNewStudent();
+}
+
+ensureSimulationUi();
+
 els.nav.forEach((button) => {
-  button.addEventListener("click", () => {
-    state.view = button.dataset.view;
-    els.nav.forEach((item) => item.classList.toggle("active", item === button));
-    els.views.forEach((view) => view.classList.toggle("active", view.id === `${state.view}-view`));
-    els.title.textContent = viewTitles[state.view];
-    if (state.view === "simulator") renderSimulator();
-    if (state.view === "new-student") renderNewStudent();
-  });
+  button.addEventListener("click", () => setView(button.dataset.view));
 });
 
 els.cohort.addEventListener("change", renderAll);
@@ -764,16 +1010,36 @@ els.table.addEventListener("click", (event) => {
   if (row) renderDetail(row);
 });
 
-[els.simMotivation, els.simAttendance, els.simHours, els.simPrevious, els.simExam].forEach((input) => {
+els.detail.addEventListener("click", (event) => {
+  const simulateButton = event.target.closest("[data-simulate-id]");
+  const exportButton = event.target.closest("[data-export-id]");
+  const id = simulateButton?.dataset.simulateId || exportButton?.dataset.exportId;
+  if (!id) return;
+  const row = state.rows.find((item) => item.id === id);
+  if (!row) return;
+  if (simulateButton) loadStudentIntoSimulator(row);
+  if (exportButton) downloadCaseReport(buildSimulationCase(valuesFromStudent(row), row));
+});
+
+[els.simMotivation, els.simAttendance, els.simHours, els.simPrevious, els.simExam, els.simTutoring, els.simResources].filter(Boolean).forEach((input) => {
   input.addEventListener("input", renderSimulator);
 });
+
+if (els.exportSimReport) {
+  els.exportSimReport.addEventListener("click", () => {
+    renderSimulator();
+    downloadCaseReport(state.currentSimulation);
+  });
+}
 
 [els.newId, els.newMotivation, els.newAttendance, els.newHours, els.newPrevious, els.newExam, els.newTutoring, els.newResources].forEach((input) => {
   input.addEventListener("input", renderNewStudent);
 });
 
 window.dashboardTestApi = {
+  buildCaseReport,
   buildInterventionSegments,
+  buildSimulationCase,
   cleanCatalanText,
   evaluateNewStudent,
   explainabilitySummary,

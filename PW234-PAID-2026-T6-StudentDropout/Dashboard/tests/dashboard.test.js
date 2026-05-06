@@ -152,3 +152,66 @@ test("evaluateNewStudent calculates risk factors and recommended actions from fo
   assert.equal(result.recommendedActions.some(([title]) => title === "Tutoria motivacional"), true);
   assert.equal(result.recommendedActions.some(([title]) => title === "Seguiment d'assistència"), true);
 });
+test("buildSimulationCase compares a concrete student with simulated values", () => {
+  const { buildSimulationCase } = loadDashboardApi();
+  const source = {
+    id: "STU-0042",
+    Motivation_Level: "Low",
+    Attendance: 62,
+    Hours_Studied: 8,
+    Previous_Scores: 58,
+    Exam_Score: 59,
+    Tutoring_Sessions: 0,
+    Access_to_Resources: "Low",
+    riskScore: 94,
+    riskLevel: "high",
+  };
+
+  const result = buildSimulationCase({
+    Motivation_Level: "Medium",
+    Attendance: 84,
+    Hours_Studied: 22,
+    Previous_Scores: 72,
+    Exam_Score: 74,
+    Tutoring_Sessions: 2,
+    Access_to_Resources: "High",
+  }, source);
+
+  assert.equal(result.id, "STU-0042");
+  assert.equal(result.original.riskScore, 94);
+  assert.equal(result.simulated.Attendance, 84);
+  assert.equal(result.delta < 0, true);
+  assert.equal(result.simulated.recommendedActions.length > 0, true);
+});
+
+test("buildCaseReport returns escaped printable HTML with original and simulated risk", () => {
+  const { buildCaseReport, buildSimulationCase } = loadDashboardApi();
+  const simulationCase = buildSimulationCase({
+    Motivation_Level: "Medium",
+    Attendance: 82,
+    Hours_Studied: 20,
+    Previous_Scores: 72,
+    Exam_Score: 74,
+    Tutoring_Sessions: 1,
+    Access_to_Resources: "Medium",
+  }, {
+    id: "STU-<script>",
+    Motivation_Level: "Low",
+    Attendance: 62,
+    Hours_Studied: 8,
+    Previous_Scores: 58,
+    Exam_Score: 59,
+    Tutoring_Sessions: 0,
+    Access_to_Resources: "Low",
+    riskScore: 92,
+    riskLevel: "high",
+  });
+
+  const report = buildCaseReport(simulationCase);
+
+  assert.equal(report.includes("<!doctype html>"), true);
+  assert.equal(report.includes("STU-&lt;script&gt;"), true);
+  assert.equal(report.includes("Risc original"), true);
+  assert.equal(report.includes("Risc simulat"), true);
+  assert.equal(report.includes("Accions recomanades"), true);
+});
