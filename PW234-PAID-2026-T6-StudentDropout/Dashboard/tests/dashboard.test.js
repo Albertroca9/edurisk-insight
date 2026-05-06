@@ -103,6 +103,7 @@ test("cleanCatalanText fixes common missing accents and mojibake", () => {
   );
   assert.equal(cleanCatalanText("Seguiment d'assistencia i presencia a classe."), "Seguiment d'assistència i presència a classe.");
   assert.equal(cleanCatalanText("Intervencio prioritaria"), "Intervenció prioritària");
+  assert.equal(cleanCatalanText("Tutoria motivacional i motivacio baixa"), "Tutoria motivacional i motivació baixa");
 });
 
 test("sortRows orders table data by selected column and direction", () => {
@@ -116,6 +117,45 @@ test("sortRows orders table data by selected column and direction", () => {
   assert.equal(sortRows(rows, "riskScore", "desc").map((row) => row.id).join(","), "STU-0002,STU-0003,STU-0001");
   assert.equal(sortRows(rows, "Hours_Studied", "asc").map((row) => row.id).join(","), "STU-0001,STU-0002,STU-0003");
   assert.equal(sortRows(rows, "Motivation_Level", "asc").map((row) => row.id).join(","), "STU-0001,STU-0002,STU-0003");
+});
+
+test("parseStudentProfiles and applyStudentProfiles attach readable profile data", () => {
+  const { applyStudentProfiles, parseStudentProfiles } = loadDashboardApi();
+  const profiles = parseStudentProfiles([
+    "id,profile_id,profile_name,profile_summary,profile_characteristics,profile_recommendation",
+    "STU-0002,2,Perfil d'alumne 2,\"Risc academic alt\",\"Assistencia baixa|Motivacio baixa|Poques hores d'estudi\",\"Reforc progressiu\"",
+  ].join("\n"));
+  const rows = [{ id: "STU-0002" }, { id: "STU-9999" }];
+
+  applyStudentProfiles(rows, profiles);
+
+  assert.equal(rows[0].studentProfile.name, "Perfil d'alumne 2");
+  assert.equal(rows[0].studentProfile.characteristics.length, 3);
+  assert.equal(rows[0].studentProfile.characteristics[0], "Assistència baixa");
+  assert.equal(rows[1].studentProfile.name, "Perfil d'alumne no classificat");
+});
+
+test("buildInterventionTimeline spreads intervention impact over time", () => {
+  const { buildInterventionTimeline } = loadDashboardApi();
+  const row = {
+    riskScore: 92,
+    riskLevel: "high",
+    Attendance: 62,
+    Hours_Studied: 8,
+    Exam_Score: 59,
+    Motivation_Level: "Low",
+    recommendedActions: [["Reforc academic", ""]],
+  };
+
+  const timeline = buildInterventionTimeline(row);
+
+  assert.equal(timeline.length, 3);
+  assert.equal(timeline[0].label, "Setmana 0");
+  assert.equal(timeline[0].riskScore, 92);
+  assert.equal(timeline[1].riskScore < timeline[0].riskScore, true);
+  assert.equal(timeline[2].riskScore < timeline[1].riskScore, true);
+  assert.equal(timeline[2].Attendance > timeline[0].Attendance, true);
+  assert.equal(timeline[2].Motivation_Level, "Medium");
 });
 
 test("explainabilitySummary describes the active model source", () => {

@@ -1,5 +1,6 @@
 const DATA_URL = "../Data/student_preprocessed.csv";
 const PREDICTIONS_URL = "data/student_predictions_xgboost_shap.csv";
+const STUDENT_PROFILES_URL = "data/student_profiles.csv";
 
 const state = {
   rows: [],
@@ -132,6 +133,50 @@ function parsePredictions(text) {
   return predictions;
 }
 
+function defaultStudentProfile() {
+  return {
+    id: "",
+    profileId: "",
+    name: "Perfil d'alumne no classificat",
+    summary: "No hi ha perfil precalculat disponible per aquest alumne.",
+    characteristics: ["Sense perfil de cluster disponible"],
+    recommendation: "Revisar els factors individuals i les accions recomanades.",
+  };
+}
+
+function parseStudentProfiles(text) {
+  const lines = text.trim().split(/\r?\n/);
+  const headers = splitCsvLine(lines.shift());
+  const profiles = new Map();
+
+  lines.forEach((line) => {
+    const values = splitCsvLine(line);
+    const row = {};
+    headers.forEach((header, i) => {
+      row[header] = cleanCatalanText(values[i] ?? "");
+    });
+    profiles.set(row.id, {
+      id: row.id,
+      profileId: row.profile_id,
+      name: row.profile_name || `Perfil d'alumne ${row.profile_id}`,
+      summary: row.profile_summary,
+      characteristics: (row.profile_characteristics || "")
+        .split("|")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      recommendation: row.profile_recommendation,
+    });
+  });
+
+  return profiles;
+}
+
+function applyStudentProfiles(rows, profiles) {
+  rows.forEach((row) => {
+    row.studentProfile = profiles.get(row.id) || defaultStudentProfile();
+  });
+}
+
 function safeJson(value, fallback) {
   try {
     return JSON.parse(value);
@@ -155,9 +200,12 @@ function cleanCatalanText(value) {
     .replaceAll("competÃ¨ncies", "competències")
     .replaceAll("Revisio", "Revisió")
     .replaceAll("revisio", "revisió")
+    .replace(/\bMotivacio\b/g, "Motivació")
+    .replace(/\bmotivacio\b/g, "motivació")
+    .replaceAll("Assistencia", "Assistència")
     .replaceAll("assistencia", "assistència")
     .replaceAll("presencia", "presència")
-    .replaceAll("progres", "progrés")
+    .replace(/\bprogres\b/g, "progrés")
     .replaceAll("Reforc", "Reforç")
     .replaceAll("reforc", "reforç")
     .replaceAll("academic", "acadèmic")
@@ -245,6 +293,42 @@ function recommendActions(row) {
   if (row.Access_to_Resources === "Low") actions.push(["Recursos educatius", "Prioritzar materials, espais d'estudi o suport digital."]);
   if (!actions.length) actions.push(["Seguiment ordinari", "Mantenir observació i revisar evolució en el pròxim cicle."]);
   return actions.slice(0, 4);
+}
+
+function buildInterventionTimeline(row) {
+  const previousScores = Number.isFinite(Number(row.Previous_Scores)) ? Number(row.Previous_Scores) : Number(row.Exam_Score || 0);
+  const steps = [
+    { label: "Setmana 0", progress: 0 },
+    { label: "Setmana 4", progress: 0.45 },
+    { label: "Setmana 8", progress: 1 },
+  ];
+
+  return steps.map((step) => {
+    const simulated = {
+      ...row,
+      Attendance: Math.min(100, Math.round(row.Attendance + 12 * step.progress)),
+      Hours_Studied: Math.round(row.Hours_Studied + 7 * step.progress),
+      Previous_Scores: Math.min(100, Math.round(previousScores + 4 * step.progress)),
+      Exam_Score: Math.min(100, Math.round(row.Exam_Score + 7 * step.progress)),
+      Tutoring_Sessions: Math.min(10, Math.round((row.Tutoring_Sessions || 0) + 2 * step.progress)),
+      Access_to_Resources: step.progress >= 1 && row.Access_to_Resources === "Low" ? "Medium" : row.Access_to_Resources,
+      Motivation_Level: step.progress >= 1 && row.Motivation_Level === "Low" ? "Medium" : row.Motivation_Level,
+    };
+    const risk = calculateRisk(simulated);
+    const projectedScore = Math.max(0, Math.round(row.riskScore - 26 * step.progress));
+    const riskScore = step.progress === 0 ? row.riskScore : Math.min(risk.score, projectedScore);
+    const riskLevel = riskScore >= 65 ? "high" : riskScore >= 38 ? "medium" : "low";
+    return {
+      label: step.label,
+      action: row.recommendedActions?.[0]?.[0] || "Intervenció recomanada",
+      riskScore,
+      riskLevel,
+      Attendance: simulated.Attendance,
+      Hours_Studied: simulated.Hours_Studied,
+      Exam_Score: simulated.Exam_Score,
+      Motivation_Level: simulated.Motivation_Level,
+    };
+  });
 }
 
 function filteredRows() {
@@ -544,7 +628,7 @@ function renderTable() {
   if (els.riskFilter.value !== "all") rows = rows.filter((row) => row.riskLevel === els.riskFilter.value);
   if (els.motivationFilter.value !== "all") rows = rows.filter((row) => row.Motivation_Level === els.motivationFilter.value);
   if (query) {
-    rows = rows.filter((row) => `${row.id} ${row.Motivation_Level} ${row.Gender} ${row.Distance_from_Home}`.toLowerCase().includes(query));
+    rows = rows.filter((row) => `${row.id} ${row.studentProfile?.name || ""} ${row.Motivation_Level} ${row.Gender} ${row.Distance_from_Home}`.toLowerCase().includes(query));
   }
   rows = sortRows(rows, state.sort.key, state.sort.direction);
   els.tableCount.textContent = `${formatInt(rows.length)} resultats`;
@@ -553,6 +637,7 @@ function renderTable() {
     <tr data-id="${row.id}">
       <td>${row.id}</td>
       <td><span class="pill ${row.riskLevel}">${row.riskScore}%</span></td>
+      <td>${escapeHtml(row.studentProfile?.name || defaultStudentProfile().name)}</td>
       <td>${row.Motivation_Level}</td>
       <td>${row.Attendance}%</td>
       <td>${row.Hours_Studied}</td>
@@ -574,6 +659,7 @@ function sortRows(rows, key, direction) {
 
 function sortValue(row, key) {
   if (key === "action") return row.recommendedActions[0]?.[0] || "";
+  if (key === "profile") return row.studentProfile?.name || "";
   return row[key];
 }
 
@@ -616,10 +702,54 @@ function renderStudentExplanation(row, options = {}) {
     ${note ? `<p class="explain-text compact">${note}</p>` : ""}
     <p class="panel-label">Factors principals</p>
     ${renderImpactChart(row.riskFactors)}
+    ${renderStudentProfile(row)}
+    ${renderInterventionTimeline(row)}
     <p class="panel-label" style="margin-top:18px">Accions suggerides</p>
     <div class="action-list">
       ${row.recommendedActions.map(([title, text]) => `<div class="action-chip"><strong>${title}</strong><span>${text}</span></div>`).join("")}
     </div>
+  `;
+}
+
+function renderStudentProfile(row) {
+  const profile = row.studentProfile || defaultStudentProfile();
+  return `
+    <section class="profile-card">
+      <p class="panel-label">Perfil del clustering</p>
+      <h3>${escapeHtml(profile.name)}</h3>
+      <p>${escapeHtml(profile.summary)}</p>
+      <div class="profile-tags">
+        ${profile.characteristics.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+      </div>
+      <strong>${escapeHtml(profile.recommendation)}</strong>
+    </section>
+  `;
+}
+
+function renderInterventionTimeline(row) {
+  const timeline = buildInterventionTimeline(row);
+  const maxRisk = Math.max(1, ...timeline.map((item) => item.riskScore));
+  return `
+    <section class="timeline-card">
+      <p class="panel-label">Evoluci&oacute; de la intervenci&oacute;</p>
+      <h3>Impacte progressiu estimat</h3>
+      <p class="explain-text compact">Escenari simulat: l'impacte de la intervenci&oacute; es reparteix progressivament en el temps i no modifica el dataset original.</p>
+      <div class="timeline-list">
+        ${timeline.map((item) => `
+          <div class="timeline-step">
+            <div>
+              <strong>${item.label}</strong>
+              <span>${escapeHtml(item.action)}</span>
+            </div>
+            <div class="timeline-meter">
+              <span class="timeline-fill ${item.riskLevel}" style="width:${Math.round((item.riskScore / maxRisk) * 100)}%"></span>
+            </div>
+            <b>${item.riskScore}%</b>
+            <small>Assist. ${item.Attendance}% &middot; ${item.Hours_Studied}h &middot; Exam ${item.Exam_Score} &middot; motivaci&oacute; ${motivationLabel(item.Motivation_Level)}</small>
+          </div>
+        `).join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -916,6 +1046,17 @@ async function loadData() {
       state.modelMode = "rule";
     }
 
+    try {
+      const profileResponse = await fetch(`${STUDENT_PROFILES_URL}?v=${Date.now()}`);
+      if (profileResponse.ok) {
+        applyStudentProfiles(state.rows, parseStudentProfiles(await profileResponse.text()));
+      } else {
+        applyStudentProfiles(state.rows, new Map());
+      }
+    } catch {
+      applyStudentProfiles(state.rows, new Map());
+    }
+
     els.loading.classList.add("hidden");
     renderAll();
   } catch (error) {
@@ -1039,11 +1180,14 @@ if (els.exportSimReport) {
 window.dashboardTestApi = {
   buildCaseReport,
   buildInterventionSegments,
+  buildInterventionTimeline,
   buildSimulationCase,
   cleanCatalanText,
   evaluateNewStudent,
   explainabilitySummary,
+  applyStudentProfiles,
   normalizeImpactFactor,
+  parseStudentProfiles,
   sortRows,
 };
 
