@@ -1,11 +1,25 @@
 const DATA_URL = "../Data/student_preprocessed.csv";
 const PREDICTIONS_URL = "data/student_predictions_xgboost_shap.csv";
+const VALIDATION_DATA_URL = "../Data/validation_final.csv";
+const VALIDATION_PREDICTIONS_URL = "data/validation_predictions_xgboost_shap.csv";
 const STUDENT_PROFILES_URL = "data/student_profiles.csv";
+const VALIDATION_PROFILES_URL = "data/validation_profiles.csv";
+const STUDENT_PROFILE_MODEL_URL = "data/student_profile_model.json";
+
+const simulatorRangeConfig = {
+  Attendance: { min: 0, max: 100 },
+  Previous_Scores: { min: 0, max: 100 },
+  Exam_Score: { min: 0, max: 100 },
+};
 
 const state = {
   rows: [],
+  validationRows: [],
   filtered: [],
+  validationFiltered: [],
   selected: null,
+  selectedValidation: null,
+  profileModel: null,
   simulationSource: null,
   currentSimulation: null,
   view: "overview",
@@ -64,6 +78,14 @@ const els = {
   newResources: document.querySelector("#new-resources"),
   newResultTitle: document.querySelector("#new-result-title"),
   newResult: document.querySelector("#new-student-result"),
+  validationSearch: document.querySelector("#validation-search"),
+  validationRiskFilter: document.querySelector("#validation-risk-filter"),
+  validationMotivationFilter: document.querySelector("#validation-motivation-filter"),
+  validationTable: document.querySelector("#validation-table"),
+  validationSortHeaders: document.querySelectorAll(".validation-sort-header"),
+  validationTableCount: document.querySelector("#validation-table-count"),
+  validationDetailTitle: document.querySelector("#validation-detail-title"),
+  validationDetail: document.querySelector("#validation-detail"),
 };
 
 const viewTitles = {
@@ -71,6 +93,7 @@ const viewTitles = {
   students: "Llista prioritzada d'estudiants",
   simulator: "Simulador d'intervenció individual",
   "new-student": "Avaluació d'un alumne nou",
+  validation: "Validació del sistema",
 };
 
 const numberColumns = new Set([
@@ -87,12 +110,13 @@ const numberColumns = new Set([
   "dropout",
 ]);
 
-function parseCsv(text) {
+function parseCsv(text, options = {}) {
+  const idPrefix = options.idPrefix || "STU";
   const lines = text.trim().split(/\r?\n/);
   const headers = splitCsvLine(lines.shift());
   return lines.map((line, index) => {
     const values = splitCsvLine(line);
-    const row = { id: `STU-${String(index + 1).padStart(4, "0")}` };
+    const row = { id: `${idPrefix}-${String(index + 1).padStart(4, "0")}` };
     headers.forEach((header, i) => {
       const raw = values[i] ?? "";
       row[header] = numberColumns.has(header) ? Number(raw) : raw;
@@ -139,7 +163,7 @@ function defaultStudentProfile() {
     profileId: "",
     name: "Perfil d'alumne no classificat",
     summary: "No hi ha perfil precalculat disponible per aquest alumne.",
-    characteristics: ["Sense perfil de cluster disponible"],
+    characteristics: ["Sense perfil de seguiment disponible"],
     recommendation: "Revisar els factors individuals i les accions recomanades.",
   };
 }
@@ -175,6 +199,40 @@ function applyStudentProfiles(rows, profiles) {
   rows.forEach((row) => {
     row.studentProfile = profiles.get(row.id) || defaultStudentProfile();
   });
+}
+
+function profileFromModelEntry(entry) {
+  if (!entry) return defaultStudentProfile();
+  return {
+    id: "",
+    profileId: String(entry.profile_id || ""),
+    name: entry.profile_name || `Perfil d'alumne ${entry.profile_id}`,
+    summary: entry.profile_summary || "",
+    characteristics: entry.profile_characteristics || [],
+    recommendation: entry.profile_recommendation || "",
+  };
+}
+
+function estimateStudentProfile(row, profileModel = state.profileModel) {
+  if (!profileModel) return defaultStudentProfile();
+  let bestProfileId = "";
+  let bestDistance = Infinity;
+  profileModel.columns.forEach((column) => {
+    if (profileModel.stds[column] === 0) profileModel.stds[column] = 1;
+  });
+  Object.entries(profileModel.centroids).forEach(([profileId, centroid]) => {
+    const distance = profileModel.columns.reduce((sum, column) => {
+      const value = Number(row[column] ?? 0);
+      const scaled = (value - Number(profileModel.means[column] || 0)) / Number(profileModel.stds[column] || 1);
+      const diff = scaled - Number(centroid[column] || 0);
+      return sum + diff * diff;
+    }, 0);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestProfileId = profileId;
+    }
+  });
+  return profileFromModelEntry(profileModel.profiles[bestProfileId]);
 }
 
 function safeJson(value, fallback) {
@@ -218,6 +276,20 @@ function cleanCatalanText(value) {
     .replaceAll("evolucio", "evolució")
     .replaceAll("proxim", "pròxim")
     .replaceAll("tendencia", "tendència");
+}
+
+function clientFacingText(value) {
+  return cleanCatalanText(value)
+    .replace(/XGBoost\s*\+\s*SHAP/gi, "Predicció del sistema")
+    .replace(/Probabilitat\s+XGBoost/gi, "Predicció del sistema")
+    .replace(/XGBoost/gi, "predicció del sistema")
+    .replace(/SHAP/gi, "factors")
+    .replace(/Score explicable/gi, "Criteri transparent")
+    .replace(/score explicable/gi, "criteri transparent")
+    .replace(/Dropout observat al dataset/gi, "Abandonament observat")
+    .replace(/dropout observat al dataset/gi, "abandonament observat")
+    .replace(/dropout/gi, "abandonament")
+    .replace(/dataset/gi, "dades");
 }
 
 function applyModelPredictions(rows, predictions) {
@@ -340,11 +412,13 @@ function filteredRows() {
 
 function renderAll() {
   state.filtered = filteredRows();
+  state.validationFiltered = [...state.validationRows];
   renderMetrics();
   renderPriorityChart();
   renderDrivers();
   renderInterventions();
   renderTable();
+  renderValidationTable();
   renderSimulator();
   renderNewStudent();
 }
@@ -366,6 +440,7 @@ function evaluateNewStudent(values) {
   row.riskLevel = risk.level;
   row.riskFactors = risk.factors;
   row.recommendedActions = recommendActions(row);
+  row.studentProfile = estimateStudentProfile(row);
   return row;
 }
 
@@ -378,17 +453,17 @@ function renderMetrics() {
   els.dropout.textContent = `${percent(observedRisk, rows.length)}%`;
   els.dropoutSub.textContent = `${formatInt(observedRisk)} casos observats`;
   els.highRisk.textContent = formatInt(highRisk);
-  els.attendance.textContent = state.modelMode === "xgboost" ? "SHAP" : "Regles";
+  els.attendance.textContent = state.modelMode === "model" ? "Factors" : "Regles";
   document.querySelector(".metric.explain small").textContent = explainabilitySummary(state.modelMode);
-  document.querySelector("#metric-high-risk + small").textContent = state.modelMode === "xgboost"
-    ? "segons XGBoost + SHAP"
-    : "segons score explicable";
+  document.querySelector("#metric-high-risk + small").textContent = state.modelMode === "model"
+    ? "segons predicció del sistema"
+    : "segons criteri transparent";
 }
 
 function explainabilitySummary(modelMode) {
-  return modelMode === "xgboost"
-    ? "XGBoost + SHAP: cada predicció inclou factors locals que indiquen què incrementa o redueix el risc."
-    : "Score explicable: el risc es calcula amb regles transparents sobre assistència, estudi, notes i motivació.";
+  return modelMode === "model" || modelMode === "xgboost"
+    ? "Predicció del sistema: cada resultat inclou factors que indiquen què incrementa o redueix el risc."
+    : "Criteri transparent: el risc es calcula amb regles sobre assistència, estudi, notes i motivació.";
 }
 
 function buildInterventionSegments(rows) {
@@ -529,11 +604,43 @@ function roundRect(ctx, x, y, width, height, radius) {
 function normalizeImpactFactor(factor) {
   const rawImpact = Number.isFinite(Number(factor.impact)) ? Number(factor.impact) : Number(factor.shap || 0);
   const riskImpact = Number.isFinite(rawImpact) ? rawImpact : 0;
-  return {
+  const normalized = {
     label: translateFactorLabel(factor.label || factor.feature || "Factor"),
     impact: -riskImpact,
     displayValue: factor.value === undefined ? "" : String(factor.value),
   };
+  Object.defineProperties(normalized, {
+    rawLabel: { value: factor.label || factor.feature || "Factor" },
+    rawValue: { value: factor.value },
+  });
+  return normalized;
+}
+
+function motivationValueFromFactor(factor) {
+  const name = String(factor.rawLabel || factor.label || "");
+  const isTrue = factor.rawValue === true || String(factor.rawValue).toLowerCase() === "true";
+  if (/Motivation[_ ]Level[_ ]Low/i.test(name) && isTrue) return "baixa";
+  if (/Motivation[_ ]Level[_ ]Medium/i.test(name) && isTrue) return "mitjana";
+  return "";
+}
+
+function readableImpactFactors(factors) {
+  const normalized = factors.map(normalizeImpactFactor);
+  const motivationFactors = normalized.filter((factor) => /Motivation[_ ]Level/i.test(factor.rawLabel));
+  const nonMotivation = normalized.filter((factor) => !/Motivation[_ ]Level/i.test(factor.rawLabel));
+  if (!motivationFactors.length) return nonMotivation;
+
+  const explicitValue = motivationFactors.map(motivationValueFromFactor).find(Boolean);
+  const displayValue = explicitValue || "alta";
+  const impact = motivationFactors.reduce((sum, factor) => sum + factor.impact, 0);
+  const motivationFactor = {
+    label: "Motivació",
+    impact,
+    displayValue,
+    rawLabel: "Motivation_Level",
+    rawValue: displayValue,
+  };
+  return [motivationFactor, ...nonMotivation].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 }
 
 function translateFactorLabel(label) {
@@ -557,8 +664,29 @@ function translateFactorLabel(label) {
   return labels[label] || label.replaceAll("_", " ");
 }
 
-function renderImpactChart(factors) {
-  const normalized = factors.map(normalizeImpactFactor);
+function factorSeverity(factor) {
+  const magnitude = Math.abs(factor.impact);
+  if (factor.impact < 0) return { label: "Factor protector", className: "protective" };
+  if (magnitude >= 20) return { label: "Factor de risc important", className: "high" };
+  if (magnitude >= 8) return { label: "Influència moderada", className: "medium" };
+  return { label: "Influència baixa", className: "low" };
+}
+
+function factorExplanationText(factor) {
+  const increasesRisk = factor.impact >= 0;
+  const label = factor.label.toLowerCase();
+  if (!increasesRisk) return "Redueix el risc o compensa altres senyals d'alerta.";
+  if (label.includes("assist")) return "Augmenta el risc: assistència per sota del nivell recomanat.";
+  if (label.includes("nota d'examen")) return "Augmenta el risc: rendiment actual baix.";
+  if (label.includes("notes pr")) return "Augmenta el risc: resultats previs millorables.";
+  if (label.includes("hores")) return "Augmenta el risc: dedicació d'estudi insuficient.";
+  if (label.includes("motiv")) return "Augmenta el risc: pot requerir seguiment tutorial.";
+  if (label.includes("tutories")) return "Pot augmentar el risc: no consten prou sessions de suport.";
+  return "Augmenta el risc i convé revisar aquest indicador.";
+}
+
+function renderFactorExplanation(factors) {
+  const normalized = readableImpactFactors(factors);
   const maxImpact = Math.max(1, ...normalized.map((factor) => Math.abs(factor.impact)));
   return `
     <p class="explain-text compact">Aquest gràfic explica la predicció individual. Les barres vermelles a l'esquerra augmenten el risc; les verdes a la dreta el redueixen.</p>
@@ -582,6 +710,29 @@ function renderImpactChart(factors) {
         `;
       }).join("")}
     </div>
+  `;
+}
+
+function renderFactorExplanation(factors) {
+  const normalized = readableImpactFactors(factors);
+  return `
+    <section class="factor-explanation">
+      <h3>Què explica aquest risc?</h3>
+      <p class="explain-text compact">Els factors estan ordenats per prioritat. Les etiquetes indiquen si convé actuar-hi o si ajuden a reduir el risc.</p>
+      ${normalized.map((factor) => {
+        const severity = factorSeverity(factor);
+        return `
+          <div class="factor-card ${severity.className}">
+            <div>
+              <strong>${factor.label}</strong>
+              ${factor.displayValue ? `<span>${factor.displayValue}</span>` : ""}
+            </div>
+            <p>${factorExplanationText(factor)}</p>
+            <small>${severity.label}</small>
+          </div>
+        `;
+      }).join("")}
+    </section>
   `;
 }
 
@@ -633,10 +784,29 @@ function renderTable() {
   rows = sortRows(rows, state.sort.key, state.sort.direction);
   els.tableCount.textContent = `${formatInt(rows.length)} resultats`;
   updateSortHeaders();
-  els.table.innerHTML = rows.slice(0, 250).map((row) => `
+  els.table.innerHTML = renderStudentRows(rows);
+}
+
+function renderValidationTable() {
+  if (!els.validationTable) return;
+  const query = els.validationSearch.value.trim().toLowerCase();
+  let rows = [...state.validationFiltered];
+  if (els.validationRiskFilter.value !== "all") rows = rows.filter((row) => row.riskLevel === els.validationRiskFilter.value);
+  if (els.validationMotivationFilter.value !== "all") rows = rows.filter((row) => row.Motivation_Level === els.validationMotivationFilter.value);
+  if (query) {
+    rows = rows.filter((row) => `${row.id} ${row.studentProfile?.name || ""} ${row.Motivation_Level} ${row.Gender} ${row.Distance_from_Home}`.toLowerCase().includes(query));
+  }
+  rows = sortRows(rows, state.sort.key, state.sort.direction);
+  els.validationTableCount.textContent = `${formatInt(rows.length)} resultats`;
+  updateValidationSortHeaders();
+  els.validationTable.innerHTML = renderStudentRows(rows);
+}
+
+function renderStudentRows(rows) {
+  return rows.map((row) => `
     <tr data-id="${row.id}">
       <td>${row.id}</td>
-      <td><span class="pill ${row.riskLevel}">${row.riskScore}%</span></td>
+      <td><span class="pill risk-pill ${row.riskLevel}">${row.riskScore}%</span></td>
       <td>${escapeHtml(row.studentProfile?.name || defaultStudentProfile().name)}</td>
       <td>${row.Motivation_Level}</td>
       <td>${row.Attendance}%</td>
@@ -671,6 +841,14 @@ function updateSortHeaders() {
   });
 }
 
+function updateValidationSortHeaders() {
+  els.validationSortHeaders.forEach((button) => {
+    const active = button.dataset.sort === state.sort.key;
+    button.classList.toggle("active", active);
+    button.dataset.direction = active ? state.sort.direction : "";
+  });
+}
+
 function renderDetail(row) {
   state.selected = row;
   els.detailTitle.textContent = row.id;
@@ -678,10 +856,20 @@ function renderDetail(row) {
   els.detail.innerHTML = renderStudentExplanation(row);
 }
 
+function renderValidationDetail(row) {
+  state.selectedValidation = row;
+  els.validationDetailTitle.textContent = row.id;
+  els.validationDetail.classList.remove("empty");
+  els.validationDetail.innerHTML = renderStudentExplanation(row);
+}
+
+function studentRiskTitle(row) {
+  if (Number.isFinite(Number(row.xgbProbability))) return `Risc d'abandonament: ${(Number(row.xgbProbability) * 100).toFixed(1)}%`;
+  return `Risc d'abandonament: ${row.riskScore}%`;
+}
+
 function renderStudentExplanation(row, options = {}) {
-  const title = options.title || (state.modelMode === "xgboost" && row.xgbProbability !== undefined
-    ? `Probabilitat XGBoost ${(row.xgbProbability * 100).toFixed(1)}%`
-    : row.dropout ? "Dropout observat al dataset" : "Sense dropout observat al dataset");
+  const title = clientFacingText(options.title || studentRiskTitle(row));
   const note = options.note || "";
   const decisionTools = options.hideDecisionTools ? "" : `
     <div class="decision-tools">
@@ -700,8 +888,7 @@ function renderStudentExplanation(row, options = {}) {
     </div>
     ${decisionTools}
     ${note ? `<p class="explain-text compact">${note}</p>` : ""}
-    <p class="panel-label">Factors principals</p>
-    ${renderImpactChart(row.riskFactors)}
+    ${renderFactorExplanation(row.riskFactors)}
     ${renderStudentProfile(row)}
     ${renderInterventionTimeline(row)}
     <p class="panel-label" style="margin-top:18px">Accions suggerides</p>
@@ -715,7 +902,7 @@ function renderStudentProfile(row) {
   const profile = row.studentProfile || defaultStudentProfile();
   return `
     <section class="profile-card">
-      <p class="panel-label">Perfil del clustering</p>
+      <p class="panel-label">Perfil de seguiment</p>
       <h3>${escapeHtml(profile.name)}</h3>
       <p>${escapeHtml(profile.summary)}</p>
       <div class="profile-tags">
@@ -733,7 +920,7 @@ function renderInterventionTimeline(row) {
     <section class="timeline-card">
       <p class="panel-label">Evoluci&oacute; de la intervenci&oacute;</p>
       <h3>Impacte progressiu estimat</h3>
-      <p class="explain-text compact">Escenari simulat: l'impacte de la intervenci&oacute; es reparteix progressivament en el temps i no modifica el dataset original.</p>
+      <p class="explain-text compact">Escenari simulat: l'impacte de la intervenci&oacute; es reparteix progressivament en el temps i no modifica les dades originals.</p>
       <div class="timeline-list">
         ${timeline.map((item) => `
           <div class="timeline-step">
@@ -754,6 +941,15 @@ function renderInterventionTimeline(row) {
 }
 
 function ensureSimulationUi() {
+  [
+    [els.simAttendance, simulatorRangeConfig.Attendance],
+    [els.simPrevious, simulatorRangeConfig.Previous_Scores],
+    [els.simExam, simulatorRangeConfig.Exam_Score],
+  ].forEach(([input, range]) => {
+    if (!input) return;
+    input.min = String(range.min);
+    input.max = String(range.max);
+  });
   if (!document.querySelector("#sim-tutoring") && els.simControls) {
     els.simControls.insertAdjacentHTML("beforeend", `
       <label><span>Tutories</span><input id="sim-tutoring" type="range" min="0" max="10" value="0" /></label>
@@ -1001,9 +1197,9 @@ function renderNewStudent() {
   });
   els.newResultTitle.textContent = row.id;
   els.newResult.innerHTML = renderStudentExplanation(row, {
-    title: "Risc calculat amb score explicable",
+    title: "Risc calculat amb criteri transparent",
     hideDecisionTools: true,
-    note: "Estimació orientativa: aquest alumne no s'afegeix al CSV ni reentrena el model, només aplica les regles transparents del dashboard.",
+    note: "Estimació orientativa: aquest alumne no s'afegeix al CSV ni recalcula la predicció global; només aplica les regles transparents del dashboard.",
   });
 }
 
@@ -1033,12 +1229,19 @@ async function loadData() {
     const text = await response.text();
     state.rows = parseCsv(text);
 
+    const validationResponse = await fetch(`${VALIDATION_DATA_URL}?v=${Date.now()}`);
+    if (validationResponse.ok) {
+      state.validationRows = parseCsv(await validationResponse.text(), { idPrefix: "VAL" });
+    } else {
+      state.validationRows = [];
+    }
+
     try {
       const predResponse = await fetch(`${PREDICTIONS_URL}?v=${Date.now()}`);
       if (predResponse.ok) {
         const predictions = parsePredictions(await predResponse.text());
         applyModelPredictions(state.rows, predictions);
-        state.modelMode = "xgboost";
+        state.modelMode = "model";
       } else {
         state.modelMode = "rule";
       }
@@ -1047,14 +1250,42 @@ async function loadData() {
     }
 
     try {
+      const validationPredResponse = await fetch(`${VALIDATION_PREDICTIONS_URL}?v=${Date.now()}`);
+      if (validationPredResponse.ok) {
+        applyModelPredictions(state.validationRows, parsePredictions(await validationPredResponse.text()));
+      }
+    } catch {
+      // Validation still works with the transparent fallback risk when predictions are not exported yet.
+    }
+
+    try {
+      const profileModelResponse = await fetch(`${STUDENT_PROFILE_MODEL_URL}?v=${Date.now()}`);
+      state.profileModel = profileModelResponse.ok ? await profileModelResponse.json() : null;
+    } catch {
+      state.profileModel = null;
+    }
+
+    try {
       const profileResponse = await fetch(`${STUDENT_PROFILES_URL}?v=${Date.now()}`);
       if (profileResponse.ok) {
-        applyStudentProfiles(state.rows, parseStudentProfiles(await profileResponse.text()));
+        const profiles = parseStudentProfiles(await profileResponse.text());
+        applyStudentProfiles(state.rows, profiles);
       } else {
         applyStudentProfiles(state.rows, new Map());
       }
     } catch {
       applyStudentProfiles(state.rows, new Map());
+    }
+
+    try {
+      const validationProfileResponse = await fetch(`${VALIDATION_PROFILES_URL}?v=${Date.now()}`);
+      if (validationProfileResponse.ok) {
+        applyStudentProfiles(state.validationRows, parseStudentProfiles(await validationProfileResponse.text()));
+      } else {
+        applyStudentProfiles(state.validationRows, new Map());
+      }
+    } catch {
+      applyStudentProfiles(state.validationRows, new Map());
     }
 
     els.loading.classList.add("hidden");
@@ -1133,6 +1364,9 @@ els.refresh.addEventListener("click", loadData);
 els.search.addEventListener("input", renderTable);
 els.riskFilter.addEventListener("change", renderTable);
 els.motivationFilter.addEventListener("change", renderTable);
+if (els.validationSearch) els.validationSearch.addEventListener("input", renderValidationTable);
+if (els.validationRiskFilter) els.validationRiskFilter.addEventListener("change", renderValidationTable);
+if (els.validationMotivationFilter) els.validationMotivationFilter.addEventListener("change", renderValidationTable);
 els.sortHeaders.forEach((button) => {
   button.addEventListener("click", () => {
     const key = button.dataset.sort;
@@ -1144,12 +1378,31 @@ els.sortHeaders.forEach((button) => {
     renderTable();
   });
 });
+els.validationSortHeaders.forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.sort;
+    const sameColumn = state.sort.key === key;
+    state.sort = {
+      key,
+      direction: sameColumn && state.sort.direction === "desc" ? "asc" : "desc",
+    };
+    renderValidationTable();
+  });
+});
 els.table.addEventListener("click", (event) => {
   const rowEl = event.target.closest("tr");
   if (!rowEl) return;
   const row = state.rows.find((item) => item.id === rowEl.dataset.id);
   if (row) renderDetail(row);
 });
+if (els.validationTable) {
+  els.validationTable.addEventListener("click", (event) => {
+    const rowEl = event.target.closest("tr");
+    if (!rowEl) return;
+    const row = state.validationRows.find((item) => item.id === rowEl.dataset.id);
+    if (row) renderValidationDetail(row);
+  });
+}
 
 els.detail.addEventListener("click", (event) => {
   const simulateButton = event.target.closest("[data-simulate-id]");
@@ -1161,6 +1414,18 @@ els.detail.addEventListener("click", (event) => {
   if (simulateButton) loadStudentIntoSimulator(row);
   if (exportButton) downloadCaseReport(buildSimulationCase(valuesFromStudent(row), row));
 });
+if (els.validationDetail) {
+  els.validationDetail.addEventListener("click", (event) => {
+    const simulateButton = event.target.closest("[data-simulate-id]");
+    const exportButton = event.target.closest("[data-export-id]");
+    const id = simulateButton?.dataset.simulateId || exportButton?.dataset.exportId;
+    if (!id) return;
+    const row = state.validationRows.find((item) => item.id === id);
+    if (!row) return;
+    if (simulateButton) loadStudentIntoSimulator(row);
+    if (exportButton) downloadCaseReport(buildSimulationCase(valuesFromStudent(row), row));
+  });
+}
 
 [els.simMotivation, els.simAttendance, els.simHours, els.simPrevious, els.simExam, els.simTutoring, els.simResources].filter(Boolean).forEach((input) => {
   input.addEventListener("input", renderSimulator);
@@ -1182,12 +1447,20 @@ window.dashboardTestApi = {
   buildInterventionSegments,
   buildInterventionTimeline,
   buildSimulationCase,
+  clientFacingText,
   cleanCatalanText,
   evaluateNewStudent,
+  estimateStudentProfile,
   explainabilitySummary,
   applyStudentProfiles,
   normalizeImpactFactor,
+  parseCsv,
   parseStudentProfiles,
+  readableImpactFactors,
+  renderFactorExplanation,
+  renderStudentRows,
+  simulatorRangeConfig,
+  studentRiskTitle,
   sortRows,
 };
 

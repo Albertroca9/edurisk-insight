@@ -13,8 +13,10 @@ from xgboost import XGBClassifier
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_PATH = PROJECT_ROOT / "Data" / "student_preprocessed.csv"
+VALIDATION_DATA_PATH = PROJECT_ROOT / "Data" / "validation_final.csv"
 OUTPUT_DIR = PROJECT_ROOT / "Dashboard" / "data"
 PREDICTIONS_PATH = OUTPUT_DIR / "student_predictions_xgboost_shap.csv"
+VALIDATION_PREDICTIONS_PATH = OUTPUT_DIR / "validation_predictions_xgboost_shap.csv"
 METRICS_PATH = OUTPUT_DIR / "xgboost_metrics.json"
 
 TARGET_COL = "dropout"
@@ -83,6 +85,48 @@ def recommended_actions(top_factors: list[dict], level: str) -> list[dict[str, s
     return [{"title": title, "description": description} for title, description in actions[:4]]
 
 
+def prediction_rows(
+    probabilities: np.ndarray,
+    shap_values: np.ndarray,
+    x_encoded: pd.DataFrame,
+    id_prefix: str,
+) -> list[dict[str, object]]:
+    rows = []
+    feature_names = np.array(x_encoded.columns)
+
+    for idx, (probability, shap_row) in enumerate(zip(probabilities, shap_values)):
+        order = np.argsort(np.abs(shap_row))[::-1][:TOP_N_FACTORS]
+        top_factors = []
+
+        for feature_idx in order:
+            feature_name = str(feature_names[feature_idx])
+            feature_value = x_encoded.iloc[idx, feature_idx]
+            shap_value = float(shap_row[feature_idx])
+            top_factors.append(
+                {
+                    "feature": feature_name,
+                    "label": prettify_feature_name(feature_name),
+                    "value": bool(feature_value) if isinstance(feature_value, (np.bool_, bool)) else float(feature_value),
+                    "shap": shap_value,
+                    "impact": int(round(shap_value * 10)),
+                }
+            )
+
+        level = risk_level(float(probability))
+        rows.append(
+            {
+                "id": f"{id_prefix}-{idx + 1:04d}",
+                "xgb_probability": round(float(probability), 6),
+                "risk_score": int(round(float(probability) * 100)),
+                "risk_level": level,
+                "top_factors_json": json.dumps(top_factors, ensure_ascii=False),
+                "recommended_actions_json": json.dumps(recommended_actions(top_factors, level), ensure_ascii=False),
+            }
+        )
+
+    return rows
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -129,50 +173,33 @@ def main() -> None:
         "roc_auc": float(roc_auc_score(y_test, y_prob_test)),
     }
 
-    all_probabilities = model.predict_proba(x_encoded)[:, 1]
-
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(x_encoded)
-    if isinstance(shap_values, list):
-        shap_values = shap_values[1]
+    all_probabilities = model.predict_proba(x_encoded)[:, 1]
+    train_shap_values = explainer.shap_values(x_encoded)
+    if isinstance(train_shap_values, list):
+        train_shap_values = train_shap_values[1]
 
-    prediction_rows = []
-    feature_names = np.array(x_encoded.columns)
+    pd.DataFrame(prediction_rows(all_probabilities, train_shap_values, x_encoded, "STU")).to_csv(PREDICTIONS_PATH, index=False)
 
-    for idx, (probability, shap_row) in enumerate(zip(all_probabilities, shap_values)):
-        order = np.argsort(np.abs(shap_row))[::-1][:TOP_N_FACTORS]
-        top_factors = []
-
-        for feature_idx in order:
-            feature_name = str(feature_names[feature_idx])
-            feature_value = x_encoded.iloc[idx, feature_idx]
-            shap_value = float(shap_row[feature_idx])
-            top_factors.append(
-                {
-                    "feature": feature_name,
-                    "label": prettify_feature_name(feature_name),
-                    "value": bool(feature_value) if isinstance(feature_value, (np.bool_, bool)) else float(feature_value),
-                    "shap": shap_value,
-                    "impact": int(round(shap_value * 10)),
-                }
-            )
-
-        level = risk_level(float(probability))
-        prediction_rows.append(
-            {
-                "id": f"STU-{idx + 1:04d}",
-                "xgb_probability": round(float(probability), 6),
-                "risk_score": int(round(float(probability) * 100)),
-                "risk_level": level,
-                "top_factors_json": json.dumps(top_factors, ensure_ascii=False),
-                "recommended_actions_json": json.dumps(recommended_actions(top_factors, level), ensure_ascii=False),
-            }
+    if VALIDATION_DATA_PATH.exists():
+        validation_df = pd.read_csv(VALIDATION_DATA_PATH)
+        validation_raw = validation_df.drop(columns=[TARGET_COL], errors="ignore").copy()
+        validation_encoded = pd.get_dummies(validation_raw, drop_first=True)
+        validation_encoded = validation_encoded.reindex(columns=x_encoded.columns, fill_value=0)
+        validation_probabilities = model.predict_proba(validation_encoded)[:, 1]
+        validation_shap_values = explainer.shap_values(validation_encoded)
+        if isinstance(validation_shap_values, list):
+            validation_shap_values = validation_shap_values[1]
+        pd.DataFrame(prediction_rows(validation_probabilities, validation_shap_values, validation_encoded, "VAL")).to_csv(
+            VALIDATION_PREDICTIONS_PATH,
+            index=False,
         )
 
-    pd.DataFrame(prediction_rows).to_csv(PREDICTIONS_PATH, index=False)
     METRICS_PATH.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"Prediccions exportades: {PREDICTIONS_PATH}")
+    if VALIDATION_DATA_PATH.exists():
+        print(f"Prediccions de validacio exportades: {VALIDATION_PREDICTIONS_PATH}")
     print(f"Metriques exportades: {METRICS_PATH}")
     print(json.dumps(metrics, indent=2, ensure_ascii=False))
 

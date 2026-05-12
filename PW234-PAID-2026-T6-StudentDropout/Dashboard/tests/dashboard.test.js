@@ -94,6 +94,37 @@ test("normalizeImpactFactor supports SHAP and fallback impact values", () => {
   assert.equal(normalizeImpactFactor({ label: "Tutoring Sessions", value: 0, impact: 2 }).label, "Tutories");
 });
 
+test("impact factors combine one-hot motivation into one readable factor", () => {
+  const { readableImpactFactors } = loadDashboardApi();
+
+  const factors = readableImpactFactors([
+    { feature: "Motivation_Level_Low", label: "Motivation Level Low", value: true, shap: 3.2 },
+    { feature: "Motivation_Level_Medium", label: "Motivation Level Medium", value: false, shap: -1.1 },
+    { feature: "Attendance", label: "Attendance", value: 64, shap: 2.1 },
+  ]);
+
+  assert.equal(factors.filter((factor) => factor.label === "Motivació").length, 1);
+  assert.equal(factors.find((factor) => factor.label === "Motivació").displayValue, "baixa");
+  assert.equal(factors.some((factor) => /true|false/i.test(factor.displayValue)), false);
+});
+
+test("renderFactorExplanation uses client-friendly labels instead of internal impact numbers", () => {
+  const { renderFactorExplanation } = loadDashboardApi();
+
+  const html = renderFactorExplanation([
+    { feature: "Attendance", label: "Attendance", value: 64, impact: -25 },
+    { feature: "Exam_Score", label: "Exam Score", value: 61, impact: 12 },
+    { feature: "Motivation_Level_Low", label: "Motivation Level Low", value: true, shap: 3.2 },
+    { feature: "Hours_Studied", label: "Hours Studied", value: 25, shap: -1.2 },
+  ]);
+
+  assert.equal(html.includes("explica aquest risc"), true);
+  assert.equal(html.includes("Factor de risc important"), true);
+  assert.equal(html.includes("Factor protector"), true);
+  assert.equal(html.includes("+"), false);
+  assert.equal(html.includes("impact-track"), false);
+});
+
 test("cleanCatalanText fixes common missing accents and mojibake", () => {
   const { cleanCatalanText } = loadDashboardApi();
 
@@ -135,6 +166,67 @@ test("parseStudentProfiles and applyStudentProfiles attach readable profile data
   assert.equal(rows[1].studentProfile.name, "Perfil d'alumne no classificat");
 });
 
+test("estimateStudentProfile assigns the nearest exported profile to a new student", () => {
+  const { estimateStudentProfile } = loadDashboardApi();
+  const profileModel = {
+    columns: ["Attendance", "Hours_Studied"],
+    means: { Attendance: 50, Hours_Studied: 10 },
+    stds: { Attendance: 10, Hours_Studied: 5 },
+    centroids: {
+      1: { Attendance: -2, Hours_Studied: -1 },
+      2: { Attendance: 3, Hours_Studied: 2 },
+    },
+    profiles: {
+      1: {
+        profile_id: 1,
+        profile_name: "Perfil d'alumne 1",
+        profile_summary: "Baixa assistencia",
+        profile_characteristics: ["Assistencia baixa"],
+        profile_recommendation: "Seguiment",
+      },
+      2: {
+        profile_id: 2,
+        profile_name: "Perfil d'alumne 2",
+        profile_summary: "Bon seguiment",
+        profile_characteristics: ["Assistencia alta"],
+        profile_recommendation: "Monitoritzacio",
+      },
+    },
+  };
+
+  const profile = estimateStudentProfile({ Attendance: 30, Hours_Studied: 5 }, profileModel);
+
+  assert.equal(profile.name, "Perfil d'alumne 1");
+  assert.equal(profile.summary, "Baixa assistencia");
+});
+
+test("renderStudentRows returns every filtered student instead of truncating the table", () => {
+  const { renderStudentRows } = loadDashboardApi();
+  const rows = Array.from({ length: 260 }, (_, index) => ({
+    id: `STU-${String(index + 1).padStart(4, "0")}`,
+    riskScore: index % 100,
+    riskLevel: index % 3 === 0 ? "high" : index % 3 === 1 ? "medium" : "low",
+    studentProfile: { name: `Perfil d'alumne ${(index % 4) + 1}` },
+    Motivation_Level: "Medium",
+    Attendance: 80,
+    Hours_Studied: 12,
+    Exam_Score: 70,
+    recommendedActions: [["Seguiment", ""]],
+  }));
+
+  const html = renderStudentRows(rows);
+
+  assert.equal((html.match(/<tr data-id=/g) || []).length, 260);
+  assert.equal(html.includes("STU-0260"), true);
+});
+
+test("student detail title uses abandonment risk wording instead of system prediction wording", () => {
+  const { studentRiskTitle } = loadDashboardApi();
+
+  assert.equal(studentRiskTitle({ xgbProbability: 0.999, riskScore: 100 }), "Risc d'abandonament: 99.9%");
+  assert.equal(studentRiskTitle({ dropout: 1, riskScore: 82 }), "Risc d'abandonament: 82%");
+});
+
 test("buildInterventionTimeline spreads intervention impact over time", () => {
   const { buildInterventionTimeline } = loadDashboardApi();
   const row = {
@@ -162,12 +254,12 @@ test("explainabilitySummary describes the active model source", () => {
   const { explainabilitySummary } = loadDashboardApi();
 
   assert.equal(
-    explainabilitySummary("xgboost"),
-    "XGBoost + SHAP: cada predicció inclou factors locals que indiquen què incrementa o redueix el risc.",
+    explainabilitySummary("model"),
+    "Predicció del sistema: cada resultat inclou factors que indiquen què incrementa o redueix el risc.",
   );
   assert.equal(
     explainabilitySummary("rule"),
-    "Score explicable: el risc es calcula amb regles transparents sobre assistència, estudi, notes i motivació.",
+    "Criteri transparent: el risc es calcula amb regles sobre assistència, estudi, notes i motivació.",
   );
 });
 
@@ -254,4 +346,44 @@ test("buildCaseReport returns escaped printable HTML with original and simulated
   assert.equal(report.includes("Risc original"), true);
   assert.equal(report.includes("Risc simulat"), true);
   assert.equal(report.includes("Accions recomanades"), true);
+});
+
+test("clientFacingText removes technical model vocabulary", () => {
+  const { clientFacingText } = loadDashboardApi();
+
+  const text = [
+    clientFacingText("Probabilitat XGBoost 82.4%"),
+    clientFacingText("XGBoost + SHAP"),
+    clientFacingText("Dropout observat al dataset"),
+    clientFacingText("Score explicable"),
+  ].join(" ");
+
+  assert.equal(/xgboost|shap|dropout|score|dataset/i.test(text), false);
+  assert.equal(text.includes("Predicci"), true);
+  assert.equal(/abandonament observat/i.test(text), true);
+});
+
+test("simulator ranges use true 0 to 100 limits for percentages and grades", () => {
+  const { simulatorRangeConfig } = loadDashboardApi();
+
+  assert.equal(simulatorRangeConfig.Attendance.min, 0);
+  assert.equal(simulatorRangeConfig.Attendance.max, 100);
+  assert.equal(simulatorRangeConfig.Previous_Scores.min, 0);
+  assert.equal(simulatorRangeConfig.Previous_Scores.max, 100);
+  assert.equal(simulatorRangeConfig.Exam_Score.min, 0);
+  assert.equal(simulatorRangeConfig.Exam_Score.max, 100);
+});
+
+test("parseCsv can prefix validation students separately from training students", () => {
+  const { parseCsv } = loadDashboardApi();
+  const csv = [
+    "Hours_Studied,Attendance,Previous_Scores,Motivation_Level,Tutoring_Sessions,Access_to_Resources,Exam_Score,dropout",
+    "0,20,60,Low,0,High,60,0",
+    "14,90,85,Medium,0,High,85,0",
+  ].join("\n");
+
+  const rows = parseCsv(csv, { idPrefix: "VAL" });
+
+  assert.equal(rows[0].id, "VAL-0001");
+  assert.equal(rows[1].id, "VAL-0002");
 });

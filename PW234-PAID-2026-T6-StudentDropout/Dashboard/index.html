@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>IDSS Student Dropout Dashboard</title>
+    <title>IDSS Risc Acadèmic</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -14,7 +14,7 @@
           <span class="brand-mark">ID</span>
           <div>
             <p class="eyebrow">PAID Lab</p>
-            <h1>IDSS Dropout</h1>
+            <h1>IDSS Risc Acadèmic</h1>
           </div>
         </div>
         <nav class="nav-stack">
@@ -25,6 +25,10 @@
           <button class="nav-item" data-view="students" title="Llista prioritzada">
             <span class="icon">≡</span>
             <span>Estudiants</span>
+          </button>
+          <button class="nav-item" data-view="validation" title="Validació">
+            <span class="icon">✓</span>
+            <span>Validació</span>
           </button>
           <button class="nav-item" data-view="simulator" title="Simulador de risc">
             <span class="icon">◇</span>
@@ -53,8 +57,8 @@
               <span>Cohort</span>
               <select id="cohort-filter">
                 <option value="all">Tots els estudiants</option>
-                <option value="risk">Casos observats amb dropout</option>
-                <option value="no-risk">Casos observats sense dropout</option>
+                <option value="risk">Casos amb abandonament observat</option>
+                <option value="no-risk">Casos sense abandonament observat</option>
               </select>
             </label>
             <button id="refresh-btn" class="icon-button" title="Recarregar dades">↻</button>
@@ -72,14 +76,14 @@
               <small>registres preprocessats</small>
             </article>
             <article class="metric danger">
-              <span>Dropout observat</span>
+              <span>Abandonament observat</span>
               <strong id="metric-dropout">-</strong>
               <small id="metric-dropout-sub">-</small>
             </article>
             <article class="metric warning">
               <span>Risc alt estimat</span>
               <strong id="metric-high-risk">-</strong>
-              <small>segons score explicable</small>
+              <small>segons criteri transparent</small>
             </article>
             <article class="metric explain">
               <span>Explicabilitat</span>
@@ -104,7 +108,7 @@
             <article class="panel">
               <div class="panel-head">
                 <div>
-                  <p class="panel-label">Drivers principals</p>
+                  <p class="panel-label">Causes principals</p>
                   <h3>Factors que expliquen el risc</h3>
                 </div>
               </div>
@@ -190,6 +194,72 @@
           </div>
         </section>
 
+        <section class="view" id="validation-view">
+          <div class="filters-row">
+            <label>
+              <span>Buscar</span>
+              <input id="validation-search" type="search" placeholder="ID, motivació, gènere..." />
+            </label>
+            <label>
+              <span>Nivell de risc</span>
+              <select id="validation-risk-filter">
+                <option value="all">Tots</option>
+                <option value="high">Alt</option>
+                <option value="medium">Mitjà</option>
+                <option value="low">Baix</option>
+              </select>
+            </label>
+            <label>
+              <span>Motivació</span>
+              <select id="validation-motivation-filter">
+                <option value="all">Totes</option>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="student-layout">
+            <article class="panel table-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Mostra de validació</p>
+                  <h3>Alumnes per comprovar</h3>
+                </div>
+                <span id="validation-table-count" class="table-count">-</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th><button class="validation-sort-header" data-sort="id">ID</button></th>
+                      <th><button class="validation-sort-header" data-sort="riskScore">Risc</button></th>
+                      <th><button class="validation-sort-header" data-sort="profile">Perfil</button></th>
+                      <th><button class="validation-sort-header" data-sort="Motivation_Level">Motivació</button></th>
+                      <th><button class="validation-sort-header" data-sort="Attendance">Assist.</button></th>
+                      <th><button class="validation-sort-header" data-sort="Hours_Studied">Hores</button></th>
+                      <th><button class="validation-sort-header" data-sort="Exam_Score">Exam</button></th>
+                      <th><button class="validation-sort-header" data-sort="action">Acció</button></th>
+                    </tr>
+                  </thead>
+                  <tbody id="validation-table"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel detail-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Explicació individual</p>
+                  <h3 id="validation-detail-title">Selecciona un alumne</h3>
+                </div>
+              </div>
+              <div id="validation-detail" class="student-detail empty">Tria una fila per veure factors, intervencions i simulació.</div>
+            </article>
+          </div>
+        </section>
+
         <section class="view" id="simulator-view">
           <div class="sim-layout">
             <article class="panel simulator-panel">
@@ -201,10 +271,10 @@
               </div>
               <div class="sim-controls">
                 <label><span>Motivació</span><select id="sim-motivation"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
-                <label><span>Assistència</span><input id="sim-attendance" type="range" min="60" max="100" value="78" /></label>
+                <label><span>Assistència</span><input id="sim-attendance" type="range" min="0" max="100" value="78" /></label>
                 <label><span>Hores d'estudi</span><input id="sim-hours" type="range" min="1" max="44" value="18" /></label>
-                <label><span>Nota prèvia</span><input id="sim-previous" type="range" min="50" max="100" value="72" /></label>
-                <label><span>Nota examen</span><input id="sim-exam" type="range" min="55" max="101" value="66" /></label>
+                <label><span>Nota prèvia</span><input id="sim-previous" type="range" min="0" max="100" value="72" /></label>
+                <label><span>Nota examen</span><input id="sim-exam" type="range" min="0" max="100" value="66" /></label>
               </div>
             </article>
 
@@ -229,7 +299,7 @@
                   <h3>Nou alumne</h3>
                 </div>
               </div>
-              <p class="explain-text compact">Introdueix les dades disponibles i el dashboard calcularà el risc amb el mateix score explicable que s'utilitza com a fallback del sistema.</p>
+              <p class="explain-text compact">Introdueix les dades disponibles i el dashboard calcularà el risc amb un criteri transparent quan no hi hagi predicció exportada.</p>
               <div class="new-student-form">
                 <label><span>ID alumne</span><input id="new-id" type="text" value="NOU-001" /></label>
                 <label><span>Motivació</span><select id="new-motivation"><option>Low</option><option selected>Medium</option><option>High</option></select></label>

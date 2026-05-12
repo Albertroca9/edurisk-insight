@@ -98,3 +98,12 @@ L'script entrena el model amb `Data/student_preprocessed.csv`, calcula probabili
 ## Nota tècnica
 
 El dashboard prioritza les prediccions exportades de XGBoost + SHAP. El score explicable manual només s'utilitza com a fallback si no es troba el fitxer `Dashboard/data/student_predictions_xgboost_shap.csv`.
+## Perfils de clustering
+
+Els perfils d'alumne del dashboard es poden regenerar des del mateix criteri del codi R de `Source/Clustering + Profiling`: variables numeriques, escalat, clustering jerarquic Ward i `k=4`.
+
+```bash
+python Dashboard/scripts/export_student_profiles.py
+```
+
+Aquest script llegeix `Data/student_preprocessed.csv` i exporta `Dashboard/data/student_profiles.csv`.

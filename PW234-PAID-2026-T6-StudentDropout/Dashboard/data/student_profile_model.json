@@ -1,0 +1,134 @@
+{
+  "method": "hierarchical_ward_k4_numeric_scaled",
+  "columns": [
+    "Hours_Studied",
+    "Attendance",
+    "Extracurricular_Activities",
+    "Sleep_Hours",
+    "Previous_Scores",
+    "Internet_Access",
+    "Tutoring_Sessions",
+    "Physical_Activity",
+    "Learning_Disabilities",
+    "Exam_Score"
+  ],
+  "means": {
+    "Hours_Studied": 19.975329196306948,
+    "Attendance": 79.97744816104132,
+    "Extracurricular_Activities": 0.5960345088542455,
+    "Sleep_Hours": 7.029060087785682,
+    "Previous_Scores": 75.07053125472983,
+    "Internet_Access": 0.924474042682004,
+    "Tutoring_Sessions": 1.4937187831088239,
+    "Physical_Activity": 2.9676101104888755,
+    "Learning_Disabilities": 0.10519146359921296,
+    "Exam_Score": 67.23565914938702
+  },
+  "stds": {
+    "Hours_Studied": 5.9905943365787415,
+    "Attendance": 11.547474961482814,
+    "Extracurricular_Activities": 0.4907278486029574,
+    "Sleep_Hours": 1.4681202267434879,
+    "Previous_Scores": 14.399784350759024,
+    "Internet_Access": 0.26425812483111133,
+    "Tutoring_Sessions": 1.2305704213240194,
+    "Physical_Activity": 1.0312310926271286,
+    "Learning_Disabilities": 0.3068231871619583,
+    "Exam_Score": 3.890455781261732
+  },
+  "centroids": {
+    "1": {
+      "Hours_Studied": -0.7664659009069386,
+      "Attendance": -0.7357757242222869,
+      "Extracurricular_Activities": -0.049316256515597595,
+      "Sleep_Hours": 0.0207654832748697,
+      "Previous_Scores": -0.40522700869309386,
+      "Internet_Access": 0.28580372832912915,
+      "Tutoring_Sessions": -0.037908305783433016,
+      "Physical_Activity": 0.011244752745886917,
+      "Learning_Disabilities": -0.34284065872664016,
+      "Exam_Score": -0.9745451325038685
+    },
+    "2": {
+      "Hours_Studied": -0.028255725681971645,
+      "Attendance": 0.06353449152450709,
+      "Extracurricular_Activities": 0.024547820672613015,
+      "Sleep_Hours": -0.04318687323704751,
+      "Previous_Scores": -0.014017181169266653,
+      "Internet_Access": -3.4983750954595627,
+      "Tutoring_Sessions": 0.030550342794570185,
+      "Physical_Activity": 0.043163071740730447,
+      "Learning_Disabilities": -0.026796431865418597,
+      "Exam_Score": -0.2350488167939872
+    },
+    "3": {
+      "Hours_Studied": -0.02680410580081486,
+      "Attendance": -0.052562270701164704,
+      "Extracurricular_Activities": -0.034146510962846155,
+      "Sleep_Hours": 0.05719541083914975,
+      "Previous_Scores": 0.02987917486443815,
+      "Internet_Access": 0.28580372832912915,
+      "Tutoring_Sessions": 0.040186510770878474,
+      "Physical_Activity": 0.03749821416213827,
+      "Learning_Disabilities": 2.9163654307797064,
+      "Exam_Score": -0.28815633087472975
+    },
+    "4": {
+      "Hours_Studied": 0.19062298455223797,
+      "Attendance": 0.176699866280097,
+      "Extracurricular_Activities": 0.013986134399794398,
+      "Sleep_Hours": -0.008382579976683997,
+      "Previous_Scores": 0.09432548007413054,
+      "Internet_Access": 0.28237680614322136,
+      "Tutoring_Sessions": -0.00013906260481982686,
+      "Physical_Activity": -0.012938426836787958,
+      "Learning_Disabilities": -0.3354618810732411,
+      "Exam_Score": 0.3013297480799891
+    }
+  },
+  "profiles": {
+    "1": {
+      "profile_id": 1,
+      "profile_name": "Perfil d'alumne 1",
+      "profile_summary": "Grup 1 del clustering jerarquic Ward amb 1058 alumnes. Taxa d'abandonament observada: 100%.",
+      "profile_characteristics": [
+        "Assistencia baixa",
+        "Poques hores d'estudi",
+        "Nota d'examen baixa",
+        "Motivacio baixa",
+        "Abandonament observat superior a la mitjana"
+      ],
+      "profile_recommendation": "Prioritzar revisio docent, reforc academic i seguiment proper del grup."
+    },
+    "2": {
+      "profile_id": 2,
+      "profile_name": "Perfil d'alumne 2",
+      "profile_summary": "Grup 2 del clustering jerarquic Ward amb 495 alumnes. Taxa d'abandonament observada: 24%.",
+      "profile_characteristics": [
+        "Motivacio mitjana",
+        "Abandonament observat superior a la mitjana"
+      ],
+      "profile_recommendation": "Prioritzar revisio docent, reforc academic i seguiment proper del grup."
+    },
+    "3": {
+      "profile_id": 3,
+      "profile_name": "Perfil d'alumne 3",
+      "profile_summary": "Grup 3 del clustering jerarquic Ward amb 637 alumnes. Taxa d'abandonament observada: 23%.",
+      "profile_characteristics": [
+        "Motivacio mitjana",
+        "Abandonament observat superior a la mitjana"
+      ],
+      "profile_recommendation": "Prioritzar revisio docent, reforc academic i seguiment proper del grup."
+    },
+    "4": {
+      "profile_id": 4,
+      "profile_name": "Perfil d'alumne 4",
+      "profile_summary": "Grup 4 del clustering jerarquic Ward amb 4417 alumnes. Taxa d'abandonament observada: 0%.",
+      "profile_characteristics": [
+        "Motivacio mitjana",
+        "Abandonament observat inferior a la mitjana"
+      ],
+      "profile_recommendation": "Mantenir monitoritzacio ordinaria i revisar canvis de tendencia."
+    }
+  }
+}
