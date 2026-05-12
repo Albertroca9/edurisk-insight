@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IDSS Student Dropout Dashboard</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="side-nav" aria-label="Navegació principal">
+        <div class="brand-block">
+          <span class="brand-mark">ID</span>
+          <div>
+            <p class="eyebrow">PAID Lab</p>
+            <h1>IDSS Dropout</h1>
+          </div>
+        </div>
+        <nav class="nav-stack">
+          <button class="nav-item active" data-view="overview" title="Vista global">
+            <span class="icon">⌂</span>
+            <span>Global</span>
+          </button>
+          <button class="nav-item" data-view="students" title="Llista prioritzada">
+            <span class="icon">≡</span>
+            <span>Estudiants</span>
+          </button>
+          <button class="nav-item" data-view="simulator" title="Simulador de risc">
+            <span class="icon">◇</span>
+            <span>Simulador</span>
+          </button>
+          <button class="nav-item" data-view="new-student" title="Avaluar alumne nou">
+            <span class="icon">＋</span>
+            <span>Nou alumne</span>
+          </button>
+        </nav>
+        <section class="side-panel">
+          <p class="panel-label">Prioritat del sistema</p>
+          <strong>Evitar falsos negatius</strong>
+          <span>Els casos de risc es mostren amb criteri preventiu per facilitar la revisió docent.</span>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Sistema intel·ligent de suport a la decisió</p>
+            <h2 id="view-title">Visió global del risc acadèmic</h2>
+          </div>
+          <div class="toolbar">
+            <label class="select-wrap">
+              <span>Cohort</span>
+              <select id="cohort-filter">
+                <option value="all">Tots els estudiants</option>
+                <option value="risk">Casos observats amb dropout</option>
+                <option value="no-risk">Casos observats sense dropout</option>
+              </select>
+            </label>
+            <button id="refresh-btn" class="icon-button" title="Recarregar dades">↻</button>
+          </div>
+        </header>
+
+        <section id="loading-state" class="status-band">Carregant dades del repositori...</section>
+        <section id="error-state" class="status-band error hidden"></section>
+
+        <section class="view active" id="overview-view">
+          <div class="metric-grid">
+            <article class="metric">
+              <span>Estudiants</span>
+              <strong id="metric-total">-</strong>
+              <small>registres preprocessats</small>
+            </article>
+            <article class="metric danger">
+              <span>Dropout observat</span>
+              <strong id="metric-dropout">-</strong>
+              <small id="metric-dropout-sub">-</small>
+            </article>
+            <article class="metric warning">
+              <span>Risc alt estimat</span>
+              <strong id="metric-high-risk">-</strong>
+              <small>segons score explicable</small>
+            </article>
+            <article class="metric explain">
+              <span>Explicabilitat</span>
+              <strong id="metric-attendance">-</strong>
+              <small>factors locals per estudiant</small>
+            </article>
+          </div>
+
+          <div class="overview-layout">
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Priorització docent</p>
+                  <h3>Segments que demanen intervenció</h3>
+                </div>
+                <span class="legend"><i class="risk-dot low"></i> baix <i class="risk-dot med"></i> mitjà <i class="risk-dot high"></i> alt</span>
+              </div>
+              <canvas id="scatter-chart" width="960" height="500" aria-label="Priorització docent per segments d'intervenció"></canvas>
+              <p class="explain-text">Cada barra agrupa estudiants que comparteixen una causa accionable. El color indica el nivell de risc estimat dins del segment: vermell per intervenció prioritària, ambre per seguiment preventiu i verd per monitorització ordinària.</p>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Drivers principals</p>
+                  <h3>Factors que expliquen el risc</h3>
+                </div>
+              </div>
+              <p class="explain-text compact">Percentatge d'estudiants de la cohort que presenten cada condició. Serveix per veure quines causes són més freqüents abans d'entrar al detall individual.</p>
+              <div id="driver-bars" class="driver-bars"></div>
+            </article>
+          </div>
+
+          <div class="panel full-panel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-label">Coordinació</p>
+                <h3>Perfils d'intervenció</h3>
+              </div>
+            </div>
+            <div id="intervention-grid" class="intervention-grid"></div>
+          </div>
+        </section>
+
+        <section class="view" id="students-view">
+          <div class="filters-row">
+            <label>
+              <span>Buscar</span>
+              <input id="student-search" type="search" placeholder="ID, motivació, gènere..." />
+            </label>
+            <label>
+              <span>Nivell de risc</span>
+              <select id="risk-filter">
+                <option value="all">Tots</option>
+                <option value="high">Alt</option>
+                <option value="medium">Mitjà</option>
+                <option value="low">Baix</option>
+              </select>
+            </label>
+            <label>
+              <span>Motivació</span>
+              <select id="motivation-filter">
+                <option value="all">Totes</option>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="student-layout">
+            <article class="panel table-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Llista prioritzada</p>
+                  <h3>Estudiants a revisar</h3>
+                </div>
+                <span id="table-count" class="table-count">-</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th><button class="sort-header" data-sort="id">ID</button></th>
+                      <th><button class="sort-header" data-sort="riskScore">Risc</button></th>
+                      <th><button class="sort-header" data-sort="profile">Perfil</button></th>
+                      <th><button class="sort-header" data-sort="Motivation_Level">Motivació</button></th>
+                      <th><button class="sort-header" data-sort="Attendance">Assist.</button></th>
+                      <th><button class="sort-header" data-sort="Hours_Studied">Hores</button></th>
+                      <th><button class="sort-header" data-sort="Exam_Score">Exam</button></th>
+                      <th><button class="sort-header" data-sort="action">Acció</button></th>
+                    </tr>
+                  </thead>
+                  <tbody id="student-table"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel detail-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Explicació local</p>
+                  <h3 id="detail-title">Selecciona un estudiant</h3>
+                </div>
+              </div>
+              <div id="student-detail" class="student-detail empty">Tria una fila per veure factors i intervencions recomanades.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="simulator-view">
+          <div class="sim-layout">
+            <article class="panel simulator-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">What-if</p>
+                  <h3>Simulador de risc individual</h3>
+                </div>
+              </div>
+              <div class="sim-controls">
+                <label><span>Motivació</span><select id="sim-motivation"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+                <label><span>Assistència</span><input id="sim-attendance" type="range" min="60" max="100" value="78" /></label>
+                <label><span>Hores d'estudi</span><input id="sim-hours" type="range" min="1" max="44" value="18" /></label>
+                <label><span>Nota prèvia</span><input id="sim-previous" type="range" min="50" max="100" value="72" /></label>
+                <label><span>Nota examen</span><input id="sim-exam" type="range" min="55" max="101" value="66" /></label>
+              </div>
+            </article>
+
+            <article class="panel sim-result-panel">
+              <p class="panel-label">Resultat estimat</p>
+              <div class="risk-gauge">
+                <canvas id="gauge-chart" width="360" height="220"></canvas>
+                <strong id="sim-score">-</strong>
+                <span id="sim-level">-</span>
+              </div>
+              <div id="sim-actions" class="action-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="new-student-view">
+          <div class="new-student-layout">
+            <article class="panel new-student-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Avaluació ràpida</p>
+                  <h3>Nou alumne</h3>
+                </div>
+              </div>
+              <p class="explain-text compact">Introdueix les dades disponibles i el dashboard calcularà el risc amb el mateix score explicable que s'utilitza com a fallback del sistema.</p>
+              <div class="new-student-form">
+                <label><span>ID alumne</span><input id="new-id" type="text" value="NOU-001" /></label>
+                <label><span>Motivació</span><select id="new-motivation"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+                <label><span>Assistència (%)</span><input id="new-attendance" type="number" min="0" max="100" value="78" /></label>
+                <label><span>Hores d'estudi</span><input id="new-hours" type="number" min="0" max="60" value="18" /></label>
+                <label><span>Nota prèvia</span><input id="new-previous" type="number" min="0" max="100" value="72" /></label>
+                <label><span>Nota examen</span><input id="new-exam" type="number" min="0" max="100" value="66" /></label>
+                <label><span>Tutories</span><input id="new-tutoring" type="number" min="0" max="10" value="0" /></label>
+                <label><span>Recursos</span><select id="new-resources"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+              </div>
+            </article>
+
+            <article class="panel new-student-result-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Resultat estimat</p>
+                  <h3 id="new-result-title">NOU-001</h3>
+                </div>
+              </div>
+              <div id="new-student-result" class="student-detail"></div>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
