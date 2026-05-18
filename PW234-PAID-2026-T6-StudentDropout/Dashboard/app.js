@@ -63,7 +63,6 @@ const els = {
   simValues: document.querySelector("#sim-values"),
   simSource: document.querySelector("#sim-source"),
   simComparison: document.querySelector("#sim-comparison"),
-  exportSimReport: document.querySelector("#export-sim-report"),
   gauge: document.querySelector("#gauge-chart"),
   simScore: document.querySelector("#sim-score"),
   simLevel: document.querySelector("#sim-level"),
@@ -369,10 +368,41 @@ function recommendActions(row) {
 
 function buildInterventionTimeline(row) {
   const previousScores = Number.isFinite(Number(row.Previous_Scores)) ? Number(row.Previous_Scores) : Number(row.Exam_Score || 0);
+  const primaryAction = row.recommendedActions?.[0]?.[0] || "Intervenció recomanada";
+  const primaryActionText = row.recommendedActions?.[0]?.[1] || "Aplicar el seguiment proposat i revisar indicadors acadèmics.";
   const steps = [
-    { label: "Setmana 0", progress: 0 },
-    { label: "Setmana 4", progress: 0.45 },
-    { label: "Setmana 8", progress: 1 },
+    {
+      label: "Ara",
+      progress: 0,
+      action: "Situació inicial",
+      objective: "Punt de partida amb les dades actuals de l'alumne.",
+      assumption: "Sense canvis aplicats.",
+      riskLabel: "Risc actual",
+    },
+    {
+      label: "Acció inicial",
+      progress: 0.2,
+      action: primaryAction,
+      objective: primaryActionText,
+      assumption: "Primer contacte i acord de seguiment.",
+      riskLabel: "Risc estimat si s'inicia la intervenció",
+    },
+    {
+      label: "Revisió en 4 setmanes",
+      progress: 0.55,
+      action: "Revisar assistència, estudi i bloquejos",
+      objective: "Comprovar si hi ha millora sostinguda abans d'esperar al final del període.",
+      assumption: "+7 punts d'assistència, +4 h d'estudi i primeres tutories registrades.",
+      riskLabel: "Risc estimat si milloren els indicadors",
+    },
+    {
+      label: "Objectiu a 8 setmanes",
+      progress: 1,
+      action: "Consolidar hàbits i ajustar suport",
+      objective: "Arribar a una situació de seguiment preventiu o monitorització ordinària.",
+      assumption: "+12 punts d'assistència, +7 h d'estudi, +7 punts d'examen i motivació revisada.",
+      riskLabel: "Risc estimat si milloren els indicadors",
+    },
   ];
 
   return steps.map((step) => {
@@ -392,7 +422,10 @@ function buildInterventionTimeline(row) {
     const riskLevel = riskScore >= 65 ? "high" : riskScore >= 38 ? "medium" : "low";
     return {
       label: step.label,
-      action: row.recommendedActions?.[0]?.[0] || "Intervenció recomanada",
+      action: step.action,
+      objective: step.objective,
+      assumption: step.assumption,
+      riskLabel: step.riskLabel,
       riskScore,
       riskLevel,
       Attendance: simulated.Attendance,
@@ -471,31 +504,36 @@ function buildInterventionSegments(rows) {
     {
       key: "low-attendance-and-study",
       label: "Assistència baixa + poques hores",
-      action: "Contacte prioritari i pla d'estudi",
+      action: "Intervenció: contacte prioritari i pla d'estudi",
+      help: "Grup d'alumnes amb assistència baixa i dedicació d'estudi insuficient.",
       test: (row) => row.Attendance < 75 && row.Hours_Studied < 15,
     },
     {
       key: "low-attendance",
       label: "Assistència baixa",
-      action: "Seguiment d'assistència",
+      action: "Intervenció: seguiment d'assistència",
+      help: "Grup d'alumnes que poden necessitar contacte preventiu per presència irregular.",
       test: (row) => row.Attendance < 75,
     },
     {
       key: "low-study",
       label: "Poques hores d'estudi",
-      action: "Pla d'estudi guiat",
+      action: "Intervenció: pla d'estudi guiat",
+      help: "Grup d'alumnes amb dedicació setmanal inferior al llindar recomanat.",
       test: (row) => row.Hours_Studied < 15,
     },
     {
       key: "low-performance",
       label: "Baix rendiment acadèmic",
-      action: "Reforç acadèmic",
+      action: "Intervenció: reforç acadèmic",
+      help: "Grup d'alumnes amb notes actuals o prèvies que apunten a dificultats acadèmiques.",
       test: (row) => row.Exam_Score < 64 || row.Previous_Scores < 68,
     },
     {
       key: "low-motivation",
       label: "Motivació baixa",
-      action: "Tutoria motivacional",
+      action: "Intervenció: tutoria motivacional",
+      help: "Grup d'alumnes on la motivació declarada pot afectar la continuïtat.",
       test: (row) => row.Motivation_Level === "Low",
     },
   ];
@@ -506,6 +544,7 @@ function buildInterventionSegments(rows) {
       key: segment.key,
       label: segment.label,
       action: segment.action,
+      help: segment.help,
       high: matches.filter((row) => row.riskLevel === "high").length,
       medium: matches.filter((row) => row.riskLevel === "medium").length,
       low: matches.filter((row) => row.riskLevel === "low").length,
@@ -542,7 +581,6 @@ function renderPriorityChart() {
     ctx.fillStyle = "#61757c";
     ctx.font = "16px Segoe UI";
     ctx.fillText(segment.action, 24, y + 43);
-
     [
       ["high", segment.high],
       ["medium", segment.medium],
@@ -561,12 +599,12 @@ function renderPriorityChart() {
     ctx.fillText(`${formatInt(segment.total)}`, width - pad.right + 24, y + 22);
     ctx.fillStyle = "#61757c";
     ctx.font = "15px Segoe UI";
-    ctx.fillText("estudiants", width - pad.right + 24, y + 43);
+    ctx.fillText("en aquest grup", width - pad.right + 24, y + 43);
   });
 
   ctx.fillStyle = "#61757c";
   ctx.font = "16px Segoe UI";
-  ctx.fillText("Nombre d'estudiants per segment i nivell de risc", pad.left, height - 14);
+  ctx.fillText("Nombre d'estudiants per grup i prioritat d'intervenció", pad.left, height - 14);
 }
 
 function drawPriorityGrid(ctx, width, height, pad, maxTotal) {
@@ -584,7 +622,7 @@ function drawPriorityGrid(ctx, width, height, pad, maxTotal) {
   }
   ctx.fillStyle = "#61757c";
   ctx.font = "700 13px Segoe UI";
-  ctx.fillText("Total", width - pad.right + 24, pad.top - 13);
+  ctx.fillText("Total del grup", width - pad.right + 24, pad.top - 13);
 }
 
 function roundRect(ctx, x, y, width, height, radius) {
@@ -607,7 +645,7 @@ function normalizeImpactFactor(factor) {
   const normalized = {
     label: translateFactorLabel(factor.label || factor.feature || "Factor"),
     impact: -riskImpact,
-    displayValue: factor.value === undefined ? "" : String(factor.value),
+    displayValue: factor.value === undefined || typeof factor.value === "boolean" ? "" : String(factor.value),
   };
   Object.defineProperties(normalized, {
     rawLabel: { value: factor.label || factor.feature || "Factor" },
@@ -658,31 +696,147 @@ function translateFactorLabel(label) {
     Previous_Scores: "Notes prèvies",
     "Tutoring Sessions": "Tutories",
     Tutoring_Sessions: "Tutories",
+    "Access to Resources Low": "Recursos baixos",
+    Access_to_Resources_Low: "Recursos baixos",
+    "Access to Resources Medium": "Recursos mitjans",
+    Access_to_Resources_Medium: "Recursos mitjans",
     "Parental Involvement Low": "Implicació familiar baixa",
     Parental_Involvement_Low: "Implicació familiar baixa",
+    "Peer Influence Neutral": "Influència de companys neutral",
+    Peer_Influence_Neutral: "Influència de companys neutral",
+    "Peer Influence Positive": "Influència de companys positiva",
+    Peer_Influence_Positive: "Influència de companys positiva",
+    "Teacher Quality Low": "Qualitat docent baixa",
+    Teacher_Quality_Low: "Qualitat docent baixa",
+    "Sleep Hours": "Hores de son",
+    Sleep_Hours: "Hores de son",
+    "Distance from Home Near": "Distància propera",
+    Distance_from_Home_Near: "Distància propera",
+    "Extracurricular Activities": "Activitats extracurriculars",
+    Extracurricular_Activities: "Activitats extracurriculars",
+    "Learning Disabilities": "Dificultats d'aprenentatge",
+    Learning_Disabilities: "Dificultats d'aprenentatge",
+    "Physical Activity": "Activitat física",
+    Physical_Activity: "Activitat física",
+    "Family Income Medium": "Ingressos familiars mitjans",
+    Family_Income_Medium: "Ingressos familiars mitjans",
+    "Parental Education Level Postgraduate": "Formació familiar de postgrau",
+    Parental_Education_Level_Postgraduate: "Formació familiar de postgrau",
+    "Gender Male": "Gènere masculí",
+    Gender_Male: "Gènere masculí",
   };
   return labels[label] || label.replaceAll("_", " ");
 }
 
 function factorSeverity(factor) {
   const magnitude = Math.abs(factor.impact);
-  if (factor.impact < 0) return { label: "Factor protector", className: "protective" };
+  if (factor.impact < 0) return { label: "", className: "protective" };
   if (magnitude >= 20) return { label: "Factor de risc important", className: "high" };
-  if (magnitude >= 8) return { label: "Influència moderada", className: "medium" };
-  return { label: "Influència baixa", className: "low" };
+  if (magnitude >= 8) return { label: "Pes moderat en aquesta predicció", className: "medium" };
+  return { label: "Pes baix en aquesta predicció", className: "low" };
+}
+
+function numericFactorValue(factor) {
+  const value = Number(String(factor.displayValue || "").replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+}
+
+function factorIntensity(factor) {
+  const magnitude = Math.abs(factor.impact);
+  if (factor.impact < 0) return "protective";
+  if (magnitude >= 20) return "high";
+  if (magnitude >= 8) return "medium";
+  return "low";
+}
+
+function riskLead(factor) {
+  const intensity = factorIntensity(factor);
+  if (intensity === "high") return "És un risc important";
+  if (intensity === "medium") return "És un senyal de risc moderat";
+  if (intensity === "protective") return "En aquesta predicció no és el senyal que més explica el risc";
+  return "Té una influència baixa";
 }
 
 function factorExplanationText(factor) {
-  const increasesRisk = factor.impact >= 0;
+  const intensity = factorIntensity(factor);
+  const increasesRisk = intensity !== "protective";
   const label = factor.label.toLowerCase();
-  if (!increasesRisk) return "Redueix el risc o compensa altres senyals d'alerta.";
-  if (label.includes("assist")) return "Augmenta el risc: assistència per sota del nivell recomanat.";
-  if (label.includes("nota d'examen")) return "Augmenta el risc: rendiment actual baix.";
-  if (label.includes("notes pr")) return "Augmenta el risc: resultats previs millorables.";
-  if (label.includes("hores")) return "Augmenta el risc: dedicació d'estudi insuficient.";
-  if (label.includes("motiv")) return "Augmenta el risc: pot requerir seguiment tutorial.";
-  if (label.includes("tutories")) return "Pot augmentar el risc: no consten prou sessions de suport.";
-  return "Augmenta el risc i convé revisar aquest indicador.";
+  const value = numericFactorValue(factor);
+  const lead = riskLead(factor).toLowerCase();
+  if (label.includes("assist")) {
+    const valueText = value === null ? "Assistència registrada" : `Assistència del ${value}%`;
+    if (!increasesRisk) return `${valueText}: ${lead}.`;
+    return `${valueText}: ${lead} perquè queda per sota del llindar preventiu del 75%; convé prioritzar seguiment de presència.`;
+  }
+  if (label.includes("hores d'estudi")) {
+    const valueText = value === null ? "Dedicació d'estudi registrada" : `${value} hores d'estudi`;
+    if (!increasesRisk) return `${valueText}: ${lead}.`;
+    return `${valueText}: ${lead} perquè són menys de les 15 hores setmanals recomanades; cal concretar una pauta d'estudi.`;
+  }
+  if (label.includes("nota d'examen")) {
+    const valueText = value === null ? "Nota d'examen registrada" : `Nota d'examen de ${value}`;
+    if (!increasesRisk) return `${valueText}: ${lead}.`;
+    return `${valueText}: ${lead} perquè queda per sota del llindar de reforç acadèmic de 64 punts.`;
+  }
+  if (label.includes("notes pr")) {
+    const valueText = value === null ? "Notes prèvies registrades" : `Notes prèvies de ${value}`;
+    if (!increasesRisk) return `${valueText}: ${lead}.`;
+    return `${valueText}: ${lead} perquè estan per sota dels 68 punts i poden anticipar dificultats en el curs actual.`;
+  }
+  if (label.includes("motiv")) {
+    const valueText = factor.displayValue ? `Motivació ${factor.displayValue}` : "Motivació registrada";
+    if (!increasesRisk) return `${valueText}: ${lead}.`;
+    return `${valueText}: ${lead} perquè pot reduir la constància i fa recomanable una tutoria de seguiment.`;
+  }
+  if (label.includes("tutories")) {
+    const valueText = value === null ? "Tutories registrades" : `${value} tutories`;
+    if (!increasesRisk) return `${valueText}: ${lead} perquè ja hi ha suport tutorial que pot compensar altres riscos.`;
+    return `${valueText}: ${lead} perquè no hi ha prou seguiment individual per detectar bloquejos a temps.`;
+  }
+  if (label.includes("recursos")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè l'accés a materials i espais de suport ajuda a sostenir el progrés.`;
+    return `${factor.label}: ${lead} perquè indica accés limitat a materials o espais de suport; convé facilitar recursos addicionals.`;
+  }
+  if (label.includes("implicaci")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè l'acompanyament familiar pot compensar altres dificultats.`;
+    return `${factor.label}: ${lead} perquè hi ha poc suport familiar registrat i cal reforçar el seguiment tutorial.`;
+  }
+  if (label.includes("influ")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè l'entorn de companys ajuda a mantenir hàbits acadèmics.`;
+    return `${factor.label}: ${lead} perquè aporta menys suport positiu del grup i pot reduir la constància.`;
+  }
+  if (label.includes("son")) {
+    const valueText = value === null ? "Hores de son registrades" : `${value} hores de son`;
+    if (!increasesRisk) return `${valueText}: ${lead} perquè el descans és suficient per sostenir el rendiment.`;
+    return `${valueText}: ${lead} perquè el descans pot ser insuficient i afectar concentració i assistència.`;
+  }
+  if (label.includes("qualitat docent")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè el context docent no afegeix una alerta rellevant.`;
+    return `${factor.label}: ${lead} perquè pot dificultar el seguiment de l'assignatura i fa recomanable revisar suport acadèmic.`;
+  }
+  if (label.includes("dist")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè la proximitat redueix fricció d'assistència.`;
+    return `${factor.label}: ${lead} perquè la distància pot complicar la presència regular a classe.`;
+  }
+  if (label.includes("activitats extracurriculars")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè la participació pot reforçar vinculació amb el curs.`;
+    return `${factor.label}: ${lead} perquè pot indicar menys vinculació amb l'entorn acadèmic.`;
+  }
+  if (label.includes("dificultats d'aprenentatge")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} perquè no afegeix una barrera d'aprenentatge rellevant.`;
+    return `${factor.label}: ${lead} perquè pot requerir adaptacions o suport específic.`;
+  }
+  if (label.includes("activitat f")) {
+    const valueText = value === null ? "Activitat física registrada" : `${value} sessions d'activitat física`;
+    if (!increasesRisk) return `${valueText}: ${lead} perquè pot ajudar a mantenir rutina i benestar.`;
+    return `${valueText}: ${lead} perquè pot reflectir una rutina menys estable.`;
+  }
+  if (label.includes("ingressos") || label.includes("formaci") || label.includes("gènere")) {
+    if (!increasesRisk) return `${factor.label}: ${lead} com a variable de context del perfil de l'alumne.`;
+    return `${factor.label}: ${lead} dins del context del perfil; cal interpretar-lo juntament amb els factors acadèmics.`;
+  }
+  if (!increasesRisk) return `${factor.label}: ${lead} i compensa altres senyals d'alerta.`;
+  return `${factor.label}: ${lead} i convé revisar aquest indicador dins del seguiment individual.`;
 }
 
 function renderFactorExplanation(factors) {
@@ -728,7 +882,7 @@ function renderFactorExplanation(factors) {
               ${factor.displayValue ? `<span>${factor.displayValue}</span>` : ""}
             </div>
             <p>${factorExplanationText(factor)}</p>
-            <small>${severity.label}</small>
+            ${severity.label ? `<small>${severity.label}</small>` : ""}
           </div>
         `;
       }).join("")}
@@ -737,6 +891,10 @@ function renderFactorExplanation(factors) {
 }
 
 function renderDrivers() {
+  els.drivers.innerHTML = renderDriverRows(buildDriverRows(state.filtered));
+}
+
+function renderDriversLegacyUnused() {
   const rows = state.filtered;
   const drivers = [
     ["Motivació baixa", ratio(rows, (r) => r.Motivation_Level === "Low")],
@@ -751,6 +909,43 @@ function renderDrivers() {
     <div class="driver-row">
       <div class="driver-meta"><strong>${label}</strong><span>${Math.round(value * 100)}%</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round(value * 100)}%"></div></div>
+    </div>
+  `).join("");
+}
+
+function buildDriverRows(rows) {
+  const total = rows.length;
+  const drivers = [
+    ["Motivació baixa", "Llindar de risc: motivació marcada com a Low", (row) => row.Motivation_Level === "Low"],
+    ["Assistència baixa", "Llindar de risc: menys del 75% d'assistència", (row) => row.Attendance < 75],
+    ["Poques hores d'estudi", "Llindar de risc: menys de 15 hores setmanals", (row) => row.Hours_Studied < 15],
+    ["Rendiment d'examen baix", "Llindar de risc: nota d'examen inferior a 64", (row) => row.Exam_Score < 64],
+    ["Notes prèvies baixes", "Llindar de risc: notes prèvies inferiors a 68", (row) => row.Previous_Scores < 68],
+    ["Recursos baixos", "Llindar de risc: accés a recursos marcat com a Low", (row) => row.Access_to_Resources === "Low"],
+  ];
+
+  return drivers.map(([label, threshold, predicate]) => {
+    const count = rows.filter(predicate).length;
+    return {
+      label,
+      threshold,
+      count,
+      percent: percent(count, total),
+    };
+  }).sort((a, b) => b.percent - a.percent);
+}
+
+function renderDriverRows(drivers) {
+  return drivers.map((driver) => `
+    <div class="driver-row">
+      <div class="driver-meta">
+        <strong>${driver.label}</strong>
+        <span>${driver.percent}% de la cohort · ${formatInt(driver.count)} estudiants</span>
+      </div>
+      <small><strong>${driver.threshold}</strong></small>
+      <div class="bar-track" aria-label="${driver.label}: ${driver.percent}% de la cohort">
+        <div class="bar-fill" style="width:${driver.percent}%"></div>
+      </div>
     </div>
   `).join("");
 }
@@ -807,7 +1002,7 @@ function renderStudentRows(rows) {
     <tr data-id="${row.id}">
       <td>${row.id}</td>
       <td><span class="pill risk-pill ${row.riskLevel}">${row.riskScore}%</span></td>
-      <td>${escapeHtml(row.studentProfile?.name || defaultStudentProfile().name)}</td>
+      <td><span class="profile-pill ${profileClass(row.studentProfile)}">${escapeHtml(row.studentProfile?.name || defaultStudentProfile().name)}</span></td>
       <td>${row.Motivation_Level}</td>
       <td>${row.Attendance}%</td>
       <td>${row.Hours_Studied}</td>
@@ -815,6 +1010,12 @@ function renderStudentRows(rows) {
       <td>${row.recommendedActions[0][0]}</td>
     </tr>
   `).join("");
+}
+
+function profileClass(profile) {
+  const raw = String(profile?.profileId || profile?.name || "");
+  const match = raw.match(/[1-4]/);
+  return match ? `profile-${match[0]}` : "profile-unknown";
 }
 
 function sortRows(rows, key, direction) {
@@ -868,13 +1069,151 @@ function studentRiskTitle(row) {
   return `Risc d'abandonament: ${row.riskScore}%`;
 }
 
+function studentRiskSummary(row) {
+  const level = riskLabel(row.riskLevel).toLowerCase();
+  const signals = studentRiskSignals(row, 3);
+  if (!signals.length) {
+    return `Aquest alumne té ${level} i cal revisar el cas complet per entendre què està empenyent el risc.`;
+  }
+  return `Aquest alumne té ${level} perquè presenta ${signals.map((signal) => signal.summary).join(", ")}.`;
+}
+
+function studentRiskSignals(row, limit = 3) {
+  return (row.riskFactors || [])
+    .map((factor) => normalizeStudentRiskSignal(factor))
+    .filter((factor) => factor.impact > 0)
+    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
+    .slice(0, limit)
+    .map((factor) => ({
+      label: factor.label,
+      displayValue: factor.displayValue,
+      summary: studentRiskSignalSummary(factor),
+      threshold: studentRiskSignalThreshold(factor),
+      value: studentRiskSignalValue(factor),
+      reading: studentRiskSignalReading(factor),
+    }));
+}
+
+function studentRiskNextStep(row) {
+  const [title, text] = Array.isArray(row.recommendedActions) ? row.recommendedActions[0] || [] : [];
+  if (title && text) return `${title}: ${text}`;
+  if (title) return title;
+  if (text) return text;
+  return "Cal revisar el cas amb tutoria i seguiment individual.";
+}
+
+function normalizeStudentRiskSignal(factor) {
+  const impact = Number.isFinite(Number(factor.impact)) ? Number(factor.impact) : Number(factor.shap || 0);
+  return {
+    label: translateFactorLabel(factor.label || factor.feature || "Factor"),
+    displayValue: factor.value === undefined || typeof factor.value === "boolean" ? "" : String(factor.value),
+    impact,
+  };
+}
+
+function studentRiskSignalSummary(factor) {
+  const label = factor.label.toLowerCase();
+  if (label.includes("assist")) return `assistència del ${factor.displayValue}%`;
+  if (label.includes("motiv")) return "motivació baixa";
+  if (label.includes("hores d'estudi")) return `${factor.displayValue} hores d'estudi`;
+  if (label.includes("nota d'examen")) return `nota d'examen de ${factor.displayValue}`;
+  if (label.includes("notes pr")) return `notes prèvies de ${factor.displayValue}`;
+  if (label.includes("tutories")) return `${factor.displayValue} tutories`;
+  if (label.includes("recursos")) return "recursos baixos";
+  if (label.includes("influ")) return "influència de companys neutral";
+  if (label.includes("son")) return `${factor.displayValue} hores de son`;
+  if (label.includes("qualitat docent")) return "qualitat docent baixa";
+  return factor.label.toLowerCase();
+}
+
+function studentRiskSignalValue(factor) {
+  const label = factor.label.toLowerCase();
+  const rawValue = factor.displayValue;
+  if (label.includes("motiv")) return "Baixa";
+  if (label.includes("assist")) return rawValue ? `${rawValue}%` : "-";
+  if (label.includes("hores d'estudi")) return rawValue ? `${rawValue} h` : "-";
+  if (label.includes("nota d'examen") || label.includes("notes pr")) return rawValue || "-";
+  if (label.includes("tutories")) return rawValue || "0";
+  if (label.includes("recursos")) return "Baixos";
+  if (label.includes("son")) return rawValue ? `${rawValue} h` : "-";
+  if (label.includes("qualitat docent")) return "Baixa";
+  if (label.includes("influ")) return "Neutral";
+  return rawValue || "-";
+}
+
+function studentRiskSignalThreshold(factor) {
+  const label = factor.label.toLowerCase();
+  if (label.includes("assist")) return "< 75%";
+  if (label.includes("motiv")) return "Baixa";
+  if (label.includes("hores d'estudi")) return "< 15 h";
+  if (label.includes("nota d'examen")) return "< 64";
+  if (label.includes("notes pr")) return "< 68";
+  if (label.includes("tutories")) return "0 tutories";
+  if (label.includes("recursos")) return "Baixos";
+  if (label.includes("son")) return "< 6 h";
+  if (label.includes("qualitat docent")) return "Baixa";
+  return "Revisar valor";
+}
+
+function studentRiskSignalReading(factor) {
+  const magnitude = Math.abs(factor.impact);
+  if (magnitude >= 20) return "Crític";
+  if (magnitude >= 8) return "Atenció";
+  return "Baix";
+}
+
+function renderStudentRiskSignals(row) {
+  const signals = studentRiskSignals(row, 3);
+  if (!signals.length) {
+    return `
+      <section class="risk-story">
+        <h3>Lectura del cas</h3>
+        <p class="explain-text compact">El risc surt de la combinació de totes les dades del cas; no hi ha un únic factor dominant.</p>
+        <div class="risk-signal-grid">
+          <article class="risk-signal-card">
+            <strong>Pròxim pas</strong>
+            <span>${escapeHtml(studentRiskNextStep(row))}</span>
+          </article>
+        </div>
+      </section>
+    `;
+  }
+  return `
+      <section class="risk-story">
+        <h3>${escapeHtml("Factors de risc de l'alumne")}</h3>
+        <p class="explain-text compact"><strong>Lectura del cas:</strong> ${escapeHtml(studentRiskSummary(row))}</p>
+        <div class="risk-factor-table" role="table" aria-label="${escapeHtml("Factors de risc de l'alumne")}">
+          <div class="risk-factor-row risk-factor-head" role="row">
+            <span role="columnheader">Factor</span>
+            <span role="columnheader">${escapeHtml("Valor de l'alumne")}</span>
+            <span role="columnheader">Llindar</span>
+            <span role="columnheader">Lectura</span>
+          </div>
+          ${signals.map((signal) => `
+            <div class="risk-factor-row ${signal.reading === "Crític" ? "critical" : signal.reading === "Atenció" ? "warning" : "low"}" role="row">
+              <strong role="cell">${escapeHtml(signal.label)}</strong>
+              <span role="cell">${escapeHtml(signal.value)}</span>
+              <span role="cell">${escapeHtml(signal.threshold)}</span>
+              <b role="cell">${escapeHtml(signal.reading)}</b>
+            </div>
+          `).join("")}
+        </div>
+        <div class="risk-signal-grid">
+          <article class="risk-signal-card">
+            <strong>Pròxim pas</strong>
+            <span>${escapeHtml(studentRiskNextStep(row))}</span>
+          </article>
+        </div>
+      </section>
+    `;
+}
+
 function renderStudentExplanation(row, options = {}) {
   const title = clientFacingText(options.title || studentRiskTitle(row));
   const note = options.note || "";
   const decisionTools = options.hideDecisionTools ? "" : `
     <div class="decision-tools">
       <button class="text-button" type="button" data-simulate-id="${escapeHtml(row.id)}">Simular aquest alumne</button>
-      <button class="text-button secondary" type="button" data-export-id="${escapeHtml(row.id)}">Exportar informe</button>
     </div>
   `;
   return `
@@ -888,7 +1227,7 @@ function renderStudentExplanation(row, options = {}) {
     </div>
     ${decisionTools}
     ${note ? `<p class="explain-text compact">${note}</p>` : ""}
-    ${renderFactorExplanation(row.riskFactors)}
+    ${renderStudentRiskSignals(row)}
     ${renderStudentProfile(row)}
     ${renderInterventionTimeline(row)}
     <p class="panel-label" style="margin-top:18px">Accions suggerides</p>
@@ -901,7 +1240,7 @@ function renderStudentExplanation(row, options = {}) {
 function renderStudentProfile(row) {
   const profile = row.studentProfile || defaultStudentProfile();
   return `
-    <section class="profile-card">
+    <section class="profile-card ${profileClass(profile)}">
       <p class="panel-label">Perfil de seguiment</p>
       <h3>${escapeHtml(profile.name)}</h3>
       <p>${escapeHtml(profile.summary)}</p>
@@ -918,21 +1257,23 @@ function renderInterventionTimeline(row) {
   const maxRisk = Math.max(1, ...timeline.map((item) => item.riskScore));
   return `
     <section class="timeline-card">
-      <p class="panel-label">Evoluci&oacute; de la intervenci&oacute;</p>
-      <h3>Impacte progressiu estimat</h3>
-      <p class="explain-text compact">Escenari simulat: l'impacte de la intervenci&oacute; es reparteix progressivament en el temps i no modifica les dades originals.</p>
+      <p class="panel-label">Pla d'intervenció proposat</p>
+      <h3>Què fer i què revisar</h3>
+      <p class="explain-text compact">El percentatge futur és orientatiu: mostra el risc estimat si l'alumne millora els indicadors indicats. No és una predicció garantida ni modifica les dades originals.</p>
       <div class="timeline-list">
         ${timeline.map((item) => `
           <div class="timeline-step">
             <div>
               <strong>${item.label}</strong>
               <span>${escapeHtml(item.action)}</span>
+              <small>${escapeHtml(item.objective)}</small>
             </div>
             <div class="timeline-meter">
               <span class="timeline-fill ${item.riskLevel}" style="width:${Math.round((item.riskScore / maxRisk) * 100)}%"></span>
             </div>
-            <b>${item.riskScore}%</b>
-            <small>Assist. ${item.Attendance}% &middot; ${item.Hours_Studied}h &middot; Exam ${item.Exam_Score} &middot; motivaci&oacute; ${motivationLabel(item.Motivation_Level)}</small>
+            <b><span>${escapeHtml(item.riskLabel)}</span>${item.riskScore}%</b>
+            <small>${escapeHtml(item.assumption)}</small>
+            <small>Objectiu d'indicadors: assist. ${item.Attendance}% &middot; ${item.Hours_Studied}h estudi &middot; examen ${item.Exam_Score} &middot; motivació ${motivationLabel(item.Motivation_Level)}</small>
           </div>
         `).join("")}
       </div>
@@ -966,7 +1307,6 @@ function ensureSimulationUi() {
           <p class="panel-label">Resultat estimat</p>
           <h3 id="sim-source">Cas manual</h3>
         </div>
-        <button id="export-sim-report" class="text-button" type="button">Exportar informe</button>
       </div>
     `);
     if (els.simResultPanel.children) {
@@ -983,7 +1323,6 @@ function ensureSimulationUi() {
   els.simValues = document.querySelector("#sim-values");
   els.simSource = document.querySelector("#sim-source");
   els.simComparison = document.querySelector("#sim-comparison");
-  els.exportSimReport = document.querySelector("#export-sim-report");
 }
 
 function simulationValuesFromControls() {
@@ -1406,24 +1745,20 @@ if (els.validationTable) {
 
 els.detail.addEventListener("click", (event) => {
   const simulateButton = event.target.closest("[data-simulate-id]");
-  const exportButton = event.target.closest("[data-export-id]");
-  const id = simulateButton?.dataset.simulateId || exportButton?.dataset.exportId;
+  const id = simulateButton?.dataset.simulateId;
   if (!id) return;
   const row = state.rows.find((item) => item.id === id);
   if (!row) return;
   if (simulateButton) loadStudentIntoSimulator(row);
-  if (exportButton) downloadCaseReport(buildSimulationCase(valuesFromStudent(row), row));
 });
 if (els.validationDetail) {
   els.validationDetail.addEventListener("click", (event) => {
     const simulateButton = event.target.closest("[data-simulate-id]");
-    const exportButton = event.target.closest("[data-export-id]");
-    const id = simulateButton?.dataset.simulateId || exportButton?.dataset.exportId;
+    const id = simulateButton?.dataset.simulateId;
     if (!id) return;
     const row = state.validationRows.find((item) => item.id === id);
     if (!row) return;
     if (simulateButton) loadStudentIntoSimulator(row);
-    if (exportButton) downloadCaseReport(buildSimulationCase(valuesFromStudent(row), row));
   });
 }
 
@@ -1431,19 +1766,13 @@ if (els.validationDetail) {
   input.addEventListener("input", renderSimulator);
 });
 
-if (els.exportSimReport) {
-  els.exportSimReport.addEventListener("click", () => {
-    renderSimulator();
-    downloadCaseReport(state.currentSimulation);
-  });
-}
-
 [els.newId, els.newMotivation, els.newAttendance, els.newHours, els.newPrevious, els.newExam, els.newTutoring, els.newResources].forEach((input) => {
   input.addEventListener("input", renderNewStudent);
 });
 
 window.dashboardTestApi = {
   buildCaseReport,
+  buildDriverRows,
   buildInterventionSegments,
   buildInterventionTimeline,
   buildSimulationCase,
@@ -1457,7 +1786,10 @@ window.dashboardTestApi = {
   parseCsv,
   parseStudentProfiles,
   readableImpactFactors,
+  renderDriverRows,
   renderFactorExplanation,
+  renderStudentProfile,
+  renderStudentExplanation,
   renderStudentRows,
   simulatorRangeConfig,
   studentRiskTitle,

@@ -1,4 +1,4 @@
-const assert = require("node:assert/strict");
+﻿const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -68,7 +68,8 @@ test("buildInterventionSegments groups students into teacher action segments", (
   assert.equal(JSON.stringify(segments[0]), JSON.stringify({
     key: "low-attendance-and-study",
     label: "Assistència baixa + poques hores",
-    action: "Contacte prioritari i pla d'estudi",
+    action: "Intervenció: contacte prioritari i pla d'estudi",
+    help: "Grup d'alumnes amb assistència baixa i dedicació d'estudi insuficient.",
     high: 1,
     medium: 0,
     low: 0,
@@ -120,9 +121,79 @@ test("renderFactorExplanation uses client-friendly labels instead of internal im
 
   assert.equal(html.includes("explica aquest risc"), true);
   assert.equal(html.includes("Factor de risc important"), true);
-  assert.equal(html.includes("Factor protector"), true);
+  assert.equal(html.includes("Factor protector"), false);
   assert.equal(html.includes("+"), false);
   assert.equal(html.includes("impact-track"), false);
+});
+
+test("student detail explains the case with a direct summary and concrete signals", () => {
+  const { renderStudentExplanation } = loadDashboardApi();
+  const html = renderStudentExplanation({
+    id: "STU-0001",
+    riskScore: 84,
+    riskLevel: "high",
+    Motivation_Level: "Low",
+    Attendance: 64,
+    Hours_Studied: 8,
+    Exam_Score: 59,
+    riskFactors: [
+      { feature: "Motivation_Level_Low", label: "Motivation Level Low", value: true, impact: 32 },
+      { feature: "Attendance", label: "Attendance", value: 64, impact: 21 },
+      { feature: "Hours_Studied", label: "Hours Studied", value: 8, impact: 18 },
+    ],
+    recommendedActions: [["Seguiment d'assistència", "Contacte preventiu."]],
+    studentProfile: {
+      name: "Perfil de risc",
+      summary: "Assistència baixa",
+      characteristics: ["Assistència baixa"],
+      recommendation: "Seguiment",
+    },
+  });
+
+  assert.equal(html.includes("Lectura del cas"), true);
+  assert.equal(html.includes("Aquest alumne té risc alt perquè presenta motivació baixa, assistència del 64%, 8 hores d&#039;estudi."), true);
+  assert.equal(html.includes("&lt; 75%"), true);
+  assert.equal(html.includes("Pròxim pas"), true);
+  assert.equal(html.includes("Simular aquest alumne"), true);
+  assert.equal(html.includes("Exportar informe"), false);
+  assert.equal(html.includes("Factor de risc important"), false);
+  assert.equal(html.includes("Redueix el risc estimat"), false);
+});
+
+test("student detail shows risk factors as a quick value and threshold table", () => {
+  const { renderStudentExplanation } = loadDashboardApi();
+  const html = renderStudentExplanation({
+    id: "STU-0001",
+    riskScore: 84,
+    riskLevel: "high",
+    Motivation_Level: "Low",
+    Attendance: 64,
+    Hours_Studied: 8,
+    Exam_Score: 59,
+    Previous_Scores: 62,
+    riskFactors: [
+      { feature: "Attendance", label: "Attendance", value: 64, impact: 21 },
+      { feature: "Hours_Studied", label: "Hours Studied", value: 8, impact: 18 },
+      { feature: "Motivation_Level_Low", label: "Motivation Level Low", value: true, impact: 32 },
+    ],
+    recommendedActions: [["Seguiment d'assistència", "Contacte preventiu."]],
+    studentProfile: {
+      name: "Perfil de risc",
+      summary: "Assistència baixa",
+      characteristics: ["Assistència baixa"],
+      recommendation: "Seguiment",
+    },
+  });
+
+  assert.equal(html.includes("Factors de risc de l&#039;alumne"), true);
+  assert.equal(html.includes("Valor de l&#039;alumne"), true);
+  assert.equal(html.includes("64%"), true);
+  assert.equal(html.includes("&lt; 75%"), true);
+  assert.equal(html.includes("Crític"), true);
+  assert.equal(html.includes("8 h"), true);
+  assert.equal(html.includes("&lt; 15 h"), true);
+  assert.equal(html.includes("Baixa"), true);
+  assert.equal(html.includes("Low"), false);
 });
 
 test("cleanCatalanText fixes common missing accents and mojibake", () => {
@@ -227,7 +298,7 @@ test("student detail title uses abandonment risk wording instead of system predi
   assert.equal(studentRiskTitle({ dropout: 1, riskScore: 82 }), "Risc d'abandonament: 82%");
 });
 
-test("buildInterventionTimeline spreads intervention impact over time", () => {
+test("buildInterventionTimeline returns an explainable intervention plan", () => {
   const { buildInterventionTimeline } = loadDashboardApi();
   const row = {
     riskScore: 92,
@@ -241,13 +312,47 @@ test("buildInterventionTimeline spreads intervention impact over time", () => {
 
   const timeline = buildInterventionTimeline(row);
 
-  assert.equal(timeline.length, 3);
-  assert.equal(timeline[0].label, "Setmana 0");
+  assert.equal(timeline.length, 4);
+  assert.equal(timeline[0].label, "Ara");
   assert.equal(timeline[0].riskScore, 92);
-  assert.equal(timeline[1].riskScore < timeline[0].riskScore, true);
-  assert.equal(timeline[2].riskScore < timeline[1].riskScore, true);
-  assert.equal(timeline[2].Attendance > timeline[0].Attendance, true);
-  assert.equal(timeline[2].Motivation_Level, "Medium");
+  assert.equal(timeline[0].riskLabel, "Risc actual");
+  assert.equal(timeline[1].label, "Acció inicial");
+  assert.equal(timeline[1].action, "Reforc academic");
+  assert.equal(timeline[2].label, "Revisió en 4 setmanes");
+  assert.equal(timeline[3].label, "Objectiu a 8 setmanes");
+  assert.equal(timeline[3].riskScore < timeline[0].riskScore, true);
+  assert.equal(timeline[3].riskLabel, "Risc estimat si milloren els indicadors");
+  assert.equal(timeline[3].Attendance > timeline[0].Attendance, true);
+  assert.equal(timeline[3].Motivation_Level, "Medium");
+  assert.equal(timeline[3].assumption.includes("+12 punts d'assistència"), true);
+});
+
+test("student detail labels intervention timeline as a proposed plan with estimated risk", () => {
+  const { renderStudentExplanation } = loadDashboardApi();
+  const html = renderStudentExplanation({
+    id: "STU-0001",
+    riskScore: 92,
+    riskLevel: "high",
+    Motivation_Level: "Low",
+    Attendance: 62,
+    Hours_Studied: 8,
+    Exam_Score: 59,
+    Previous_Scores: 61,
+    riskFactors: [{ feature: "Attendance", label: "Attendance", value: 62, impact: 22 }],
+    recommendedActions: [["Reforç acadèmic", "Sessions focalitzades."]],
+    studentProfile: {
+      name: "Perfil de risc",
+      summary: "Baix rendiment",
+      characteristics: ["Assistència baixa"],
+      recommendation: "Seguiment",
+    },
+  });
+
+  assert.equal(html.includes("Pla d'intervenció proposat"), true);
+  assert.equal(html.includes("Risc actual"), true);
+  assert.equal(html.includes("Risc estimat si milloren els indicadors"), true);
+  assert.equal(html.includes("No és una predicció garantida"), true);
+  assert.equal(html.includes("Objectiu a 8 setmanes"), true);
 });
 
 test("explainabilitySummary describes the active model source", () => {

@@ -2,44 +2,56 @@
 
 Aquest dashboard interactiu mostra una vista visual i operativa del risc d'abandonament acadèmic dels estudiants.
 
-## Com executar-lo
+## Com obrir el dashboard
 
-No obris `index.html` directament fent doble clic, perquè el navegador pot bloquejar la lectura del CSV. Cal aixecar un servidor local des de la carpeta principal del projecte.
+No obris `Dashboard/index.html` fent doble clic, perquè el navegador pot bloquejar la lectura dels fitxers CSV i JSON. Cal aixecar un servidor local des de la carpeta principal del projecte:
 
-Des de la carpeta principal del repositori, entra a la carpeta del projecte:
-
-```bash
-cd PW234-PAID-2026-T6-StudentDropout
-```
-
-Després aixeca un servidor local:
-
-```bash
-python -m http.server 8000
-```
-
-Si el sistema utilitza `python3` en comptes de `python`, executa:
-
-```bash
-python3 -m http.server 8000
+```powershell
+cd "C:\Users\alber\OneDrive - Universitat Politècnica de Catalunya\UPC\6è Quatri\PAID\Treball\PAID-Lab\PW234-PAID-2026-T6-StudentDropout"
+python -m http.server 8767 --bind 127.0.0.1
 ```
 
 Després obre aquest enllaç al navegador:
 
 ```text
-http://localhost:8000/Dashboard/index.html
+http://127.0.0.1:8767/Dashboard/index.html?fresh=20260518-8
 ```
 
-Si el port `8000` ja està ocupat, pots utilitzar-ne un altre:
+Si `python` no funciona, prova:
 
-```bash
-python -m http.server 8010
+```powershell
+py -m http.server 8767 --bind 127.0.0.1
 ```
 
-I obrir:
+## Si el port està ocupat
+
+Si el port `8767` ja està ocupat, utilitza un altre port, per exemple `8768`:
+
+```powershell
+python -m http.server 8768 --bind 127.0.0.1
+```
+
+I obre:
 
 ```text
-http://localhost:8010/Dashboard/index.html
+http://127.0.0.1:8768/Dashboard/index.html?fresh=20260518-8
+```
+
+## Com comprovar que carrega la versió correcta
+
+Evita obrir el dashboard amb `localhost` si tens servidors antics oberts, perquè pot acabar mostrant una versió anterior. Fes servir sempre `127.0.0.1`.
+
+Per comprovar que el navegador carrega el JavaScript actual, obre:
+
+```text
+http://127.0.0.1:8767/Dashboard/app.js?v=20260518-8
+```
+
+Si encara veus una versió antiga, tanca servidors duplicats o canvia de port. Per veure processos escoltant als ports habituals:
+
+```powershell
+netstat -ano | findstr ":8767"
+netstat -ano | findstr ":8768"
 ```
 
 ## Fitxers del dashboard
@@ -47,62 +59,46 @@ http://localhost:8010/Dashboard/index.html
 - `index.html`: estructura principal del dashboard.
 - `styles.css`: estils visuals i disseny responsive.
 - `app.js`: carrega les dades, calcula el risc explicable i gestiona la interacció.
+- `data/`: prediccions, perfils i mètriques exportades.
 
 ## Dades utilitzades
 
-El dashboard llegeix el fitxer:
+El dashboard llegeix fitxers des de:
 
 ```text
 ../Data/student_preprocessed.csv
+Dashboard/data/student_predictions_xgboost_shap.csv
+Dashboard/data/validation_predictions_xgboost_shap.csv
+Dashboard/data/student_profiles.csv
+Dashboard/data/validation_profiles.csv
+Dashboard/data/student_profile_model.json
 ```
 
-Per tant, s'ha d'executar el servidor local des de la carpeta `PW234-PAID-2026-T6-StudentDropout`, no des de dins de `Dashboard`.
+Per això el servidor s'ha d'executar des de `PW234-PAID-2026-T6-StudentDropout`, no des de dins de `Dashboard`.
 
 ## Prediccions XGBoost + SHAP
 
-El dashboard pot utilitzar prediccions reals del model XGBoost i factors explicatius SHAP. Aquests resultats estan exportats a:
+El dashboard prioritza les prediccions reals del model XGBoost i els factors explicatius SHAP exportats a:
 
 ```text
 Dashboard/data/student_predictions_xgboost_shap.csv
 Dashboard/data/xgboost_metrics.json
 ```
 
-Si aquests fitxers existeixen, el dashboard els carrega automàticament i mostra el risc segons XGBoost + SHAP. Si no existeixen, el dashboard continua funcionant amb un score explicable de fallback.
+Si aquests fitxers no estan disponibles, el dashboard continua funcionant amb un score explicable de fallback.
 
-Per regenerar les prediccions, instal·la les dependències i executa l'script d'exportació:
+Per regenerar les prediccions:
 
-```bash
+```powershell
 pip install -r Dashboard/requirements.txt
 python Dashboard/scripts/export_xgboost_shap.py
 ```
 
-Si el sistema utilitza `python3`: 
-
-```bash
-python3 -m pip install -r Dashboard/requirements.txt
-python3 Dashboard/scripts/export_xgboost_shap.py
-```
-
-L'script entrena el model amb `Data/student_preprocessed.csv`, calcula probabilitats de dropout, extreu els factors SHAP principals per estudiant i genera les accions recomanades a partir dels factors que incrementen el risc.
-
-## Funcionalitats
-
-- Vista global amb mètriques principals.
-- Priorització docent per segments d'intervenció.
-- Factors principals associats al risc.
-- Perfils d'intervenció per coordinadors.
-- Llista prioritzada d'estudiants.
-- Explicació local per estudiant.
-- Simulador what-if per veure com canvia el risc segons motivació, assistència, hores d'estudi i notes.
-
-## Nota tècnica
-
-El dashboard prioritza les prediccions exportades de XGBoost + SHAP. El score explicable manual només s'utilitza com a fallback si no es troba el fitxer `Dashboard/data/student_predictions_xgboost_shap.csv`.
 ## Perfils de clustering
 
-Els perfils d'alumne del dashboard es poden regenerar des del mateix criteri del codi R de `Source/Clustering + Profiling`: variables numeriques, escalat, clustering jerarquic Ward i `k=4`.
+Els perfils d'alumne es poden regenerar amb:
 
-```bash
+```powershell
 python Dashboard/scripts/export_student_profiles.py
 ```
 

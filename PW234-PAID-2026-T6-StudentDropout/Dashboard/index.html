@@ -97,22 +97,22 @@
               <div class="panel-head">
                 <div>
                   <p class="panel-label">Priorització docent</p>
-                  <h3>Segments que demanen intervenció</h3>
+                  <h3>Grups prioritaris d'intervenció</h3>
                 </div>
-                <span class="legend"><i class="risk-dot low"></i> baix <i class="risk-dot med"></i> mitjà <i class="risk-dot high"></i> alt</span>
+                <span class="legend"><i class="risk-dot high"></i> prioritat alta <i class="risk-dot med"></i> seguiment <i class="risk-dot low"></i> monitorització</span>
               </div>
               <canvas id="scatter-chart" width="960" height="500" aria-label="Priorització docent per segments d'intervenció"></canvas>
-              <p class="explain-text">Cada barra agrupa estudiants que comparteixen una causa accionable. El color indica el nivell de risc estimat dins del segment: vermell per intervenció prioritària, ambre per seguiment preventiu i verd per monitorització ordinària.</p>
+              <p class="explain-text">Cada fila agrupa estudiants que comparteixen una causa accionable. El text sota el nom indica la intervenció recomanada; el color mostra si el grup concentra casos de prioritat alta, seguiment preventiu o monitorització.</p>
             </article>
 
             <article class="panel">
               <div class="panel-head">
                 <div>
                   <p class="panel-label">Causes principals</p>
-                  <h3>Factors que expliquen el risc</h3>
+                  <h3>Senyals de risc més freqüents</h3>
                 </div>
               </div>
-              <p class="explain-text compact">Percentatge d'estudiants de la cohort que presenten cada condició. Serveix per veure quines causes són més freqüents abans d'entrar al detall individual.</p>
+              <p class="explain-text compact">El percentatge indica quants estudiants de la cohort presenten cada condició.</p>
               <div id="driver-bars" class="driver-bars"></div>
             </article>
           </div>
@@ -325,6 +325,6 @@
         </section>
       </section>
     </main>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260518-8"></script>
   </body>
 </html>

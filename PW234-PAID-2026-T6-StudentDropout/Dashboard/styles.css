@@ -314,18 +314,36 @@ canvas {
 
 .driver-row {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .driver-meta {
   display: flex;
+  gap: 12px;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 1.15rem;
+}
+
+.driver-meta strong {
+  color: var(--ink);
+}
+
+.driver-row small {
+  color: var(--muted);
+  display: grid;
+  gap: 3px;
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+
+.driver-row small strong {
+  color: var(--ink);
+  font-size: 1.02rem;
 }
 
 .bar-track {
-  height: 18px;
+  height: 22px;
   overflow: hidden;
   border-radius: 999px;
   background: #e9f2f0;
@@ -451,6 +469,131 @@ tr:hover { background: #f0f8f6; }
   font-size: 1.08rem;
 }
 
+.profile-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #24313a;
+}
+
+.profile-pill.profile-1,
+.profile-card.profile-1 { background: #e6f4ff; border-color: #9ed0f2; }
+.profile-pill.profile-2,
+.profile-card.profile-2 { background: #edf8e8; border-color: #acd99b; }
+.profile-pill.profile-3,
+.profile-card.profile-3 { background: #fff3d8; border-color: #e8c56e; }
+.profile-pill.profile-4,
+.profile-card.profile-4 { background: #f4eaff; border-color: #c8a7e8; }
+.profile-pill.profile-unknown,
+.profile-card.profile-unknown { background: #eef3f2; border-color: #cbdad7; }
+
+.risk-story {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #d9e8e5;
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: #f7fbfa;
+}
+
+.risk-story h3 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.risk-signal-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.risk-factor-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.risk-factor-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) minmax(92px, 0.7fr) minmax(92px, 0.7fr) minmax(84px, 0.6fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d9e8e5;
+  border-left: 5px solid var(--teal);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.risk-factor-head {
+  min-height: 34px;
+  border-left-color: #9fb8b5;
+  background: #eef6f4;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.risk-factor-row strong,
+.risk-factor-row span,
+.risk-factor-row b {
+  min-width: 0;
+}
+
+.risk-factor-row strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.risk-factor-row span {
+  color: var(--muted);
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.risk-factor-row b {
+  justify-self: start;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #eef6f4;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.risk-factor-row.critical { border-left-color: var(--red); }
+.risk-factor-row.warning { border-left-color: var(--amber); }
+.risk-factor-row.low { border-left-color: var(--teal); }
+
+.risk-factor-row.critical b { background: #ffe3df; }
+.risk-factor-row.warning b { background: #fff0cf; }
+
+.risk-signal-card {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #d9e8e5;
+  background: #ffffff;
+}
+
+.risk-signal-card strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.risk-signal-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
 .pill.high { background: var(--red); }
 .pill.medium { background: var(--amber); }
 .pill.low { background: var(--green); }
@@ -460,6 +603,10 @@ tr:hover { background: #f0f8f6; }
 .student-detail.empty {
   color: var(--muted);
   line-height: 1.5;
+}
+
+.student-detail {
+  font-size: 1.08rem;
 }
 
 .detail-score {
@@ -637,23 +784,39 @@ tr:hover { background: #f0f8f6; }
   background: #fbfefd;
 }
 
+.profile-card.profile-1 { background: #e6f4ff; border-color: #9ed0f2; }
+.profile-card.profile-2 { background: #edf8e8; border-color: #acd99b; }
+.profile-card.profile-3 { background: #fff3d8; border-color: #e8c56e; }
+.profile-card.profile-4 { background: #f4eaff; border-color: #c8a7e8; }
+.profile-card.profile-unknown { background: #eef3f2; border-color: #cbdad7; }
+
+.profile-card.profile-1,
+.profile-card.profile-2,
+.profile-card.profile-3,
+.profile-card.profile-4,
+.profile-card.profile-unknown {
+  border-left-width: 6px;
+}
+
 .profile-card h3,
 .timeline-card h3 {
   margin: 4px 0 8px;
-  font-size: 1.05rem;
+  font-size: 1.18rem;
 }
 
 .profile-card p {
   margin: 0 0 12px;
   color: var(--muted);
-  line-height: 1.45;
+  font-size: 1.02rem;
+  line-height: 1.5;
 }
 
 .profile-card strong {
   display: block;
   margin-top: 12px;
   color: var(--ink);
-  line-height: 1.35;
+  font-size: 1.04rem;
+  line-height: 1.4;
 }
 
 .profile-tags {
@@ -667,35 +830,42 @@ tr:hover { background: #f0f8f6; }
   border-radius: 999px;
   background: #e9f2f0;
   color: var(--ink);
-  font-size: 0.84rem;
+  font-size: 0.94rem;
   font-weight: 800;
 }
 
 .timeline-list {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 12px;
+  margin-top: 14px;
 }
 
 .timeline-step {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) minmax(140px, 1fr) 46px;
-  gap: 10px;
+  grid-template-columns: minmax(170px, 1.25fr) minmax(120px, 0.9fr) minmax(92px, 0.65fr);
+  gap: 12px;
   align-items: center;
-  padding: 10px;
+  padding: 12px;
+  border: 1px solid #d9e8e5;
+  border-left: 5px solid #9fb8b5;
   border-radius: 8px;
-  background: #f2f8f7;
+  background: #ffffff;
 }
 
 .timeline-step div:first-child {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+}
+
+.timeline-step strong {
+  color: var(--ink);
+  font-size: 1rem;
 }
 
 .timeline-step span,
 .timeline-step small {
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 0.9rem;
   line-height: 1.35;
 }
 
@@ -704,11 +874,23 @@ tr:hover { background: #f0f8f6; }
 }
 
 .timeline-step b {
+  display: grid;
+  gap: 3px;
   text-align: right;
+  color: var(--ink);
+  font-size: 1.12rem;
+}
+
+.timeline-step b span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .timeline-meter {
-  height: 12px;
+  height: 14px;
   border-radius: 999px;
   background: #dcebe8;
   overflow: hidden;
