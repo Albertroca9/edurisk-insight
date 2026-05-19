@@ -1,0 +1,37 @@
+{
+  "analysis_date": "2026-05-19T16:14:49.622010",
+  "total_intervention_recipients": 1319,
+  "analysis_type": "Intervention Impact Assessment",
+  "measurement_periods": {
+    "baseline": "Pre-intervention assessment",
+    "followup": "6 months after intervention start"
+  },
+  "features_tracked": [
+    "Hours_Studied",
+    "Attendance",
+    "Parental_Involvement",
+    "Access_to_Resources",
+    "Extracurricular_Activities",
+    "Sleep_Hours",
+    "Previous_Scores",
+    "Motivation_Level",
+    "Internet_Access",
+    "Tutoring_Sessions",
+    "Family_Income",
+    "Teacher_Quality",
+    "School_Type",
+    "Peer_Influence",
+    "Physical_Activity",
+    "Learning_Disabilities",
+    "Parental_Education_Level",
+    "Distance_from_Home",
+    "Gender",
+    "Exam_Score",
+    "dropout",
+    "student_id"
+  ],
+  "files_generated": {
+    "template": "/home/oriol-ms/IA-Universitat/PAID/PAID-Lab/PW234-PAID-2026-T6-StudentDropout/InterventionData/followup_data_template.csv",
+    "baseline_data": "/home/oriol-ms/IA-Universitat/PAID/PAID-Lab/PW234-PAID-2026-T6-StudentDropout/InterventionData/intervention_recipients_baseline.csv"
+  }
+}
