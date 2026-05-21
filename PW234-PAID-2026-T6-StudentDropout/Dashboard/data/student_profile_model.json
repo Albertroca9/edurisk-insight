@@ -38,6 +38,18 @@
   },
   "centroids": {
     "1": {
+      "Hours_Studied": 0.19062298455223797,
+      "Attendance": 0.176699866280097,
+      "Extracurricular_Activities": 0.013986134399794398,
+      "Sleep_Hours": -0.008382579976683997,
+      "Previous_Scores": 0.09432548007413054,
+      "Internet_Access": 0.28237680614322136,
+      "Tutoring_Sessions": -0.00013906260481982686,
+      "Physical_Activity": -0.012938426836787958,
+      "Learning_Disabilities": -0.3354618810732411,
+      "Exam_Score": 0.3013297480799891
+    },
+    "2": {
       "Hours_Studied": -0.7664659009069386,
       "Attendance": -0.7357757242222869,
       "Extracurricular_Activities": -0.049316256515597595,
@@ -49,7 +61,7 @@
       "Learning_Disabilities": -0.34284065872664016,
       "Exam_Score": -0.9745451325038685
     },
-    "2": {
+    "3": {
       "Hours_Studied": -0.028255725681971645,
       "Attendance": 0.06353449152450709,
       "Extracurricular_Activities": 0.024547820672613015,
@@ -61,7 +73,7 @@
       "Learning_Disabilities": -0.026796431865418597,
       "Exam_Score": -0.2350488167939872
     },
-    "3": {
+    "4": {
       "Hours_Studied": -0.02680410580081486,
       "Attendance": -0.052562270701164704,
       "Extracurricular_Activities": -0.034146510962846155,
@@ -72,63 +84,52 @@
       "Physical_Activity": 0.03749821416213827,
       "Learning_Disabilities": 2.9163654307797064,
       "Exam_Score": -0.28815633087472975
-    },
-    "4": {
-      "Hours_Studied": 0.19062298455223797,
-      "Attendance": 0.176699866280097,
-      "Extracurricular_Activities": 0.013986134399794398,
-      "Sleep_Hours": -0.008382579976683997,
-      "Previous_Scores": 0.09432548007413054,
-      "Internet_Access": 0.28237680614322136,
-      "Tutoring_Sessions": -0.00013906260481982686,
-      "Physical_Activity": -0.012938426836787958,
-      "Learning_Disabilities": -0.3354618810732411,
-      "Exam_Score": 0.3013297480799891
     }
   },
   "profiles": {
     "1": {
       "profile_id": 1,
-      "profile_name": "Perfil d'alumne 1",
-      "profile_summary": "Grup 1 del clustering jerarquic Ward amb 1058 alumnes. Taxa d'abandonament observada: 100%.",
+      "profile_name": "Perfil favorable i relativament homogeni",
+      "profile_summary": "Predomini de valors favorables i baixa tendència a l'abandonament.",
       "profile_characteristics": [
-        "Assistencia baixa",
-        "Poques hores d'estudi",
-        "Nota d'examen baixa",
-        "Motivacio baixa",
-        "Abandonament observat superior a la mitjana"
+        "Variabilitat moderada a l'aTLP, amb certa heterogeneïtat interna",
+        "Grup estable que requereix principalment seguiment general",
+        "Menor risc educatiu global"
       ],
-      "profile_recommendation": "Prioritzar revisio docent, reforc academic i seguiment proper del grup."
+      "profile_recommendation": "Seguiment general del grup estable."
     },
     "2": {
       "profile_id": 2,
-      "profile_name": "Perfil d'alumne 2",
-      "profile_summary": "Grup 2 del clustering jerarquic Ward amb 495 alumnes. Taxa d'abandonament observada: 24%.",
+      "profile_name": "Perfil de risc alt i homogeni",
+      "profile_summary": "Concentració de valors desfavorables en variables acadèmiques clau.",
       "profile_characteristics": [
-        "Motivacio mitjana",
-        "Abandonament observat superior a la mitjana"
+        "Alta coherència interna segons els resultats de l'aTLP",
+        "Major probabilitat d'abandonament i baix rendiment acadèmic",
+        "Grup prioritari d'intervenció"
       ],
-      "profile_recommendation": "Prioritzar revisio docent, reforc academic i seguiment proper del grup."
+      "profile_recommendation": "Intervenció prioritària i seguiment proper."
     },
     "3": {
       "profile_id": 3,
-      "profile_name": "Perfil d'alumne 3",
-      "profile_summary": "Grup 3 del clustering jerarquic Ward amb 637 alumnes. Taxa d'abandonament observada: 23%.",
+      "profile_name": "Perfil intermig amb factors de risc",
+      "profile_summary": "Combinació de factors protectors i elements de risc acadèmic.",
       "profile_characteristics": [
-        "Motivacio mitjana",
-        "Abandonament observat superior a la mitjana"
+        "Variabilitat moderada amb comportaments menys estables",
+        "Requereix seguiment específic per possibles casos de risc",
+        "Perfil acadèmic intermig"
       ],
-      "profile_recommendation": "Prioritzar revisio docent, reforc academic i seguiment proper del grup."
+      "profile_recommendation": "Seguiment específic dels casos amb senyals de risc."
     },
     "4": {
       "profile_id": 4,
-      "profile_name": "Perfil d'alumne 4",
-      "profile_summary": "Grup 4 del clustering jerarquic Ward amb 4417 alumnes. Taxa d'abandonament observada: 0%.",
+      "profile_name": "Perfil intermig amb debilitats estructurals",
+      "profile_summary": "Predomini de valors neutres amb alguns factors desfavorables.",
       "profile_characteristics": [
-        "Motivacio mitjana",
-        "Abandonament observat inferior a la mitjana"
+        "Perfil relativament equilibrat però amb certes debilitats",
+        "Pot presentar dificultats acadèmiques en casos concrets",
+        "Risc moderat i seguiment preventiu"
       ],
-      "profile_recommendation": "Mantenir monitoritzacio ordinaria i revisar canvis de tendencia."
+      "profile_recommendation": "Seguiment preventiu i revisió de dificultats concretes."
     }
   }
 }

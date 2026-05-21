@@ -4,10 +4,12 @@ Aquest dashboard interactiu mostra una vista visual i operativa del risc d'aband
 
 ## Com obrir el dashboard
 
-No obris `Dashboard/index.html` fent doble clic, perquè el navegador pot bloquejar la lectura dels fitxers CSV i JSON. Cal aixecar un servidor local des de la carpeta principal del projecte:
+No obris `Dashboard/index.html` fent doble clic, perquè el navegador pot bloquejar la lectura dels fitxers CSV i JSON. Cal aixecar un servidor local des de la carpeta principal del projecte.
+
+Primer ves a la carpeta on tinguis clonat el repositori i entra a `PW234-PAID-2026-T6-StudentDropout`:
 
 ```powershell
-cd "C:\Users\alber\OneDrive - Universitat Politècnica de Catalunya\UPC\6è Quatri\PAID\Treball\PAID-Lab\PW234-PAID-2026-T6-StudentDropout"
+cd "RUTA\ON\HAS\CLONAT\EL\REPOSITORI\PW234-PAID-2026-T6-StudentDropout"
 python -m http.server 8767 --bind 127.0.0.1
 ```
 
@@ -94,7 +96,7 @@ pip install -r Dashboard/requirements.txt
 python Dashboard/scripts/export_xgboost_shap.py
 ```
 
-## Perfils de clustering
+## Perfils d'estudiant
 
 Els perfils d'alumne es poden regenerar amb:
 
