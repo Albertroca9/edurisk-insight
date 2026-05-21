@@ -25,6 +25,7 @@ const state = {
   view: "overview",
   modelMode: "rule",
   sort: { key: "riskScore", direction: "desc" },
+  editingActions: new Set(),
 };
 
 const els = {
@@ -42,6 +43,7 @@ const els = {
   attendance: document.querySelector("#metric-attendance"),
   scatter: document.querySelector("#scatter-chart"),
   drivers: document.querySelector("#driver-bars"),
+  reviewBadge: document.querySelector("#student-review-badge"),
   interventions: document.querySelector("#intervention-grid"),
   search: document.querySelector("#student-search"),
   riskFilter: document.querySelector("#risk-filter"),
@@ -108,6 +110,13 @@ const numberColumns = new Set([
   "Exam_Score",
   "dropout",
 ]);
+
+const actionStore = window.ActionStore || {
+  getStudentAction: () => null,
+  saveStudentAction: () => null,
+  getAllPendingReviews: () => [],
+  markAsReviewed: () => null,
+};
 
 function parseCsv(text, options = {}) {
   const idPrefix = options.idPrefix || "STU";
@@ -249,6 +258,28 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysIso(days, from = new Date()) {
+  const date = new Date(from);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetweenIso(startIso, endIso) {
+  const start = new Date(`${startIso}T00:00:00`);
+  const end = new Date(`${endIso}T00:00:00`);
+  return Math.round((end - start) / 86400000);
+}
+
+function studentProfileLabel(profile) {
+  const raw = String(profile?.profileId || profile?.name || "");
+  const match = raw.match(/[1-4]/);
+  return match ? `Perfil d'alumne ${match[0]}` : "Perfil d'alumne no classificat";
 }
 
 function cleanCatalanText(value) {
@@ -449,6 +480,7 @@ function renderAll() {
   renderMetrics();
   renderPriorityChart();
   renderDrivers();
+  updateReviewBadge();
   renderInterventions();
   renderTable();
   renderValidationTable();
@@ -553,76 +585,210 @@ function buildInterventionSegments(rows) {
   });
 }
 
+const officialClusterProfiles = {
+  1: "Perfil favorable i relativament homogeni",
+  2: "Perfil de risc alt i homogeni",
+  3: "Perfil intermig amb factors de risc",
+  4: "Perfil intermig amb debilitats estructurals",
+};
+
+function clusterProfileId(row) {
+  const profile = row.studentProfile || {};
+  const rawId = profile.profileId || profile.profile_id || row.profileId || row.profile_id || "";
+  return String(rawId).trim();
+}
+
+function buildClusterRiskMatrix(rows) {
+  const matrix = Object.entries(officialClusterProfiles).map(([profileId, name]) => ({
+    profileId,
+    name,
+    high: 0,
+    medium: 0,
+    low: 0,
+    total: 0,
+  }));
+  const byProfile = new Map(matrix.map((row) => [row.profileId, row]));
+
+  rows.forEach((row) => {
+    const profileId = clusterProfileId(row);
+    const target = byProfile.get(profileId);
+    if (!target || !["high", "medium", "low"].includes(row.riskLevel)) return;
+    target[row.riskLevel] += 1;
+    target.total += 1;
+  });
+
+  return matrix;
+}
+
+function buildProfileActionMatrix(rows) {
+  const matrix = Object.entries(officialClusterProfiles).map(([profileId, name]) => ({
+    profileId,
+    name,
+    priority: 0,
+    preventive: 0,
+    monitoring: 0,
+    total: 0,
+  }));
+  const byProfile = new Map(matrix.map((row) => [row.profileId, row]));
+
+  rows.forEach((row) => {
+    const target = byProfile.get(clusterProfileId(row));
+    if (!target) return;
+    if (row.riskLevel === "high") target.priority += 1;
+    else if (row.riskLevel === "medium") target.preventive += 1;
+    else if (row.riskLevel === "low") target.monitoring += 1;
+    else return;
+    target.total += 1;
+  });
+
+  return matrix;
+}
+
+function buildRecommendedActionRows(rows) {
+  const byAction = new Map();
+  rows.forEach((row) => {
+    const seen = new Set();
+    (row.recommendedActions || []).forEach(([title]) => {
+      const label = clientFacingText(title || "").trim();
+      if (!label || seen.has(label)) return;
+      seen.add(label);
+      if (!byAction.has(label)) {
+        byAction.set(label, { label, count: 0, high: 0, medium: 0, low: 0 });
+      }
+      const item = byAction.get(label);
+      item.count += 1;
+      if (["high", "medium", "low"].includes(row.riskLevel)) item[row.riskLevel] += 1;
+    });
+  });
+
+  return [...byAction.values()]
+    .map((item) => ({ ...item, percent: percent(item.count, rows.length) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
+
+function enrichAgendaAction(action, rowsById) {
+  const row = rowsById.get(action.studentId);
+  return {
+    ...action,
+    row,
+    riskLevel: row?.riskLevel || "medium",
+    riskScore: row?.riskScore ?? "",
+  };
+}
+
+function buildAgendaSummary(actions, rows, today = todayIso()) {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const pending = actions
+    .filter((action) => action.reviewDate && action.status !== "tancat")
+    .map((action) => enrichAgendaAction(action, rowsById))
+    .sort((a, b) => String(a.reviewDate).localeCompare(String(b.reviewDate)) || String(a.studentId).localeCompare(String(b.studentId)));
+  const urgent = pending.filter((action) => action.reviewDate <= today);
+  const weekLimit = addDaysIso(7, new Date(`${today}T00:00:00`));
+  const week = pending.filter((action) => action.reviewDate > today && action.reviewDate <= weekLimit);
+  const active = pending.filter((action) => action.status === "en_seguiment").length;
+  return {
+    urgent,
+    week,
+    active,
+    isEmpty: actions.length === 0,
+  };
+}
+
+function actionStatusLabel(status) {
+  if (status === "a_revisar") return "A revisar";
+  if (status === "tancat") return "Tancat";
+  if (status === "pendent") return "Pendent";
+  return "En seguiment";
+}
+
+function renderActionStatusBadge(action) {
+  if (!action) return "";
+  return `<span class="action-status ${escapeHtml(action.status)}">${escapeHtml(actionStatusLabel(action.status))}</span>`;
+}
+
 function renderPriorityChart() {
   const canvas = els.scatter;
   const ctx = canvas.getContext("2d");
-  const segments = buildInterventionSegments(state.filtered);
-  const pad = { top: 34, right: 170, bottom: 54, left: 390 };
+  const matrix = buildClusterRiskMatrix(state.filtered);
+  const pad = { top: 68, right: 30, bottom: 34, left: 300 };
   const width = canvas.width;
   const height = canvas.height;
-  const plotWidth = width - pad.left - pad.right;
-  const rowGap = 22;
-  const rowHeight = 52;
-  const maxTotal = Math.max(1, ...segments.map((segment) => segment.total));
+  const totalRows = Math.max(1, state.filtered.length);
+  const levels = [
+    { key: "high", label: riskLabel("high"), color: "#e78680" },
+    { key: "medium", label: riskLabel("medium"), color: "#e9b957" },
+    { key: "low", label: riskLabel("low"), color: "#7cc891" },
+  ];
+  const rowGap = 14;
+  const rowHeight = 76;
+  const matrixWidth = width - pad.left - pad.right;
+  const colGap = 12;
+  const colWidth = (matrixWidth - colGap * (levels.length - 1)) / levels.length;
+  const maxCell = Math.max(1, ...matrix.flatMap((row) => levels.map((level) => row[level.key])));
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
-  drawPriorityGrid(ctx, width, height, pad, maxTotal);
 
-  segments.forEach((segment, index) => {
-    const y = pad.top + index * (rowHeight + rowGap);
-    const totalWidth = (segment.total / maxTotal) * plotWidth;
-    let x = pad.left;
+  ctx.fillStyle = "#61757c";
+  ctx.font = "800 13px Segoe UI";
+  ctx.fillText("Perfil d'estudiant", 24, 38);
+  levels.forEach((level, index) => {
+    const x = pad.left + index * (colWidth + colGap);
+    ctx.fillStyle = level.color;
+    roundRect(ctx, x, 18, colWidth, 30, 6);
+    ctx.fill();
+    ctx.fillStyle = "#25343c";
+    ctx.font = "800 14px Segoe UI";
+    ctx.fillText(level.label, x + 14, 38);
+  });
+
+  matrix.forEach((cluster, rowIndex) => {
+    const y = pad.top + rowIndex * (rowHeight + rowGap);
+    const clusterShare = percent(cluster.total, totalRows);
 
     ctx.fillStyle = "#25343c";
-    ctx.font = "700 20px Segoe UI";
-    ctx.fillText(segment.label, 24, y + 21);
+    ctx.font = "800 19px Segoe UI";
+    ctx.fillText(`Perfil ${cluster.profileId}`, 24, y + 24);
+    ctx.font = "700 15px Segoe UI";
+    ctx.fillText(`${formatInt(cluster.total)} estudiants - ${clusterShare}%`, 24, y + 48);
     ctx.fillStyle = "#61757c";
-    ctx.font = "16px Segoe UI";
-    ctx.fillText(segment.action, 24, y + 43);
-    [
-      ["high", segment.high],
-      ["medium", segment.medium],
-      ["low", segment.low],
-    ].forEach(([level, count]) => {
-      const sectionWidth = segment.total ? totalWidth * (count / segment.total) : 0;
-      if (sectionWidth <= 0) return;
-      ctx.fillStyle = riskColor(level, 0.88);
-      roundRect(ctx, x, y + 4, sectionWidth, 34, 6);
+    ctx.font = "14px Segoe UI";
+    ctx.fillText(truncateText(ctx, cluster.name, 250), 24, y + 69);
+
+    levels.forEach((level, colIndex) => {
+      const count = cluster[level.key];
+      const x = pad.left + colIndex * (colWidth + colGap);
+      const intensity = 0.16 + 0.74 * (count / maxCell);
+
+      ctx.fillStyle = riskColor(level.key, intensity);
+      roundRect(ctx, x, y, colWidth, rowHeight, 8);
       ctx.fill();
-      x += sectionWidth;
-    });
+      ctx.strokeStyle = "#d9e8e5";
+      ctx.stroke();
 
-    ctx.fillStyle = "#25343c";
-    ctx.font = "800 18px Segoe UI";
-    ctx.fillText(`${formatInt(segment.total)}`, width - pad.right + 24, y + 22);
-    ctx.fillStyle = "#61757c";
-    ctx.font = "15px Segoe UI";
-    ctx.fillText("en aquest grup", width - pad.right + 24, y + 43);
+      ctx.fillStyle = "#25343c";
+      ctx.font = "900 25px Segoe UI";
+      ctx.fillText(formatInt(count), x + 16, y + 34);
+      ctx.font = "700 14px Segoe UI";
+      ctx.fillText(`${percent(count, cluster.total)}% del perfil`, x + 16, y + 57);
+    });
   });
 
   ctx.fillStyle = "#61757c";
-  ctx.font = "16px Segoe UI";
-  ctx.fillText("Nombre d'estudiants per grup i prioritat d'intervenció", pad.left, height - 14);
+  ctx.font = "14px Segoe UI";
+  ctx.fillText("Cada casella mostra quants alumnes de cada perfil cauen en cada nivell de risc estimat.", pad.left, height - 12);
 }
 
-function drawPriorityGrid(ctx, width, height, pad, maxTotal) {
-  ctx.strokeStyle = "#d9e8e5";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i += 1) {
-    const x = pad.left + ((width - pad.left - pad.right) * i) / 4;
-    ctx.beginPath();
-    ctx.moveTo(x, pad.top - 8);
-    ctx.lineTo(x, height - pad.bottom);
-    ctx.stroke();
-    ctx.fillStyle = "#90a7ac";
-    ctx.font = "12px Segoe UI";
-    ctx.fillText(formatInt(Math.round((maxTotal * i) / 4)), x - 8, height - 30);
+function truncateText(ctx, text, maxWidth) {
+  const value = String(text);
+  if (ctx.measureText(value).width <= maxWidth) return value;
+  let out = value;
+  while (out.length > 1 && ctx.measureText(`${out}...`).width > maxWidth) {
+    out = out.slice(0, -1);
   }
-  ctx.fillStyle = "#61757c";
-  ctx.font = "700 13px Segoe UI";
-  ctx.fillText("Total del grup", width - pad.right + 24, pad.top - 13);
+  return `${out}...`;
 }
 
 function roundRect(ctx, x, y, width, height, radius) {
@@ -890,8 +1056,59 @@ function renderFactorExplanation(factors) {
   `;
 }
 
+function renderAgendaList(actions) {
+  if (!actions.length) return `<p class="agenda-empty-small">Cap revisió programada en aquest tram.</p>`;
+  return `
+    <div class="agenda-list">
+      ${actions.slice(0, 5).map((action) => `
+        <button class="agenda-student" type="button" data-agenda-id="${escapeHtml(action.studentId)}">
+          <span>
+            <strong>${escapeHtml(action.studentId)}</strong>
+            <small>${escapeHtml(action.action)}</small>
+          </span>
+          <b>${escapeHtml(action.reviewDate)}</b>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderAgendaSummary(summary) {
+  if (summary.isEmpty) {
+    return `
+      <section class="agenda-empty">
+        <strong>Encara no hi ha cap intervenció registrada.</strong>
+        <span>Accedeix a un alumne per iniciar el seguiment.</span>
+      </section>
+    `;
+  }
+  return `
+    <div class="agenda-panel">
+      <section class="agenda-section urgent">
+        <div class="agenda-section-head">
+          <span>Avui i urgent</span>
+          <strong>${formatInt(summary.urgent.length)}</strong>
+        </div>
+        ${renderAgendaList(summary.urgent)}
+      </section>
+      <section class="agenda-section week">
+        <div class="agenda-section-head">
+          <span>Aquesta setmana</span>
+          <strong>${formatInt(summary.week.length)}</strong>
+        </div>
+        ${renderAgendaList(summary.week)}
+      </section>
+      <section class="agenda-section active">
+        <span>En seguiment actiu</span>
+        <strong>${formatInt(summary.active)} alumnes</strong>
+      </section>
+    </div>
+  `;
+}
+
 function renderDrivers() {
-  els.drivers.innerHTML = renderDriverRows(buildDriverRows(state.filtered));
+  const actions = actionStore.getAllPendingReviews();
+  els.drivers.innerHTML = renderAgendaSummary(buildAgendaSummary(actions, state.rows));
 }
 
 function renderDriversLegacyUnused() {
@@ -913,7 +1130,7 @@ function renderDriversLegacyUnused() {
   `).join("");
 }
 
-function buildDriverRows(rows) {
+function buildDriverRowsLegacyUnused(rows) {
   const total = rows.length;
   const drivers = [
     ["Motivació baixa", "Llindar de risc: motivació marcada com a Low", (row) => row.Motivation_Level === "Low"],
@@ -935,7 +1152,7 @@ function buildDriverRows(rows) {
   }).sort((a, b) => b.percent - a.percent);
 }
 
-function renderDriverRows(drivers) {
+function renderDriverRowsLegacyUnused(drivers) {
   return drivers.map((driver) => `
     <div class="driver-row">
       <div class="driver-meta">
@@ -948,6 +1165,185 @@ function renderDriverRows(drivers) {
       </div>
     </div>
   `).join("");
+}
+
+function percentileValue(rows, column, percentileRank) {
+  const values = rows
+    .map((row) => Number(row[column]))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (!values.length) return 0;
+  const index = Math.min(values.length - 1, Math.max(0, Math.round((values.length - 1) * percentileRank)));
+  return values[index];
+}
+
+function valuePosition(value, min, max) {
+  if (!Number.isFinite(value) || max <= min) return 0;
+  return Math.round(((value - min) / (max - min)) * 100);
+}
+
+function numericDriverThresholds(rows, column, suffix = "") {
+  const values = rows.map((row) => Number(row[column])).filter((value) => Number.isFinite(value));
+  if (!values.length) return [];
+  const low = percentileValue(rows, column, 1 / 3);
+  const high = percentileValue(rows, column, 2 / 3);
+  return [
+    { position: 33, label: `${Math.round(low)}${suffix}` },
+    { position: 67, label: `${Math.round(high)}${suffix}` },
+  ];
+}
+
+function numericRiskBandStyle(thresholds) {
+  const low = thresholds[0]?.position ?? 33;
+  const high = thresholds[1]?.position ?? 66;
+  return `linear-gradient(90deg, var(--red) 0 ${low}%, var(--amber) ${low}% ${high}%, var(--green) ${high}% 100%)`;
+}
+
+function buildDriverRows(rows) {
+  const total = rows.length;
+  const attendanceThresholds = numericDriverThresholds(rows, "Attendance");
+  const hoursThresholds = numericDriverThresholds(rows, "Hours_Studied", "h");
+  const examThresholds = numericDriverThresholds(rows, "Exam_Score");
+  const previousThresholds = numericDriverThresholds(rows, "Previous_Scores");
+  const attendanceLow = percentileValue(rows, "Attendance", 1 / 3);
+  const hoursLow = percentileValue(rows, "Hours_Studied", 1 / 3);
+  const examLow = percentileValue(rows, "Exam_Score", 1 / 3);
+  const previousLow = percentileValue(rows, "Previous_Scores", 1 / 3);
+  const drivers = [
+    {
+      label: "Motivació",
+      predicate: (row) => row.Motivation_Level === "Low",
+      thresholds: [{ position: 33, label: "Low" }, { position: 66, label: "Medium" }],
+      bandStyle: "linear-gradient(90deg, var(--red) 0 33%, var(--amber) 33% 66%, var(--green) 66% 100%)",
+    },
+    {
+      label: "Assistència",
+      predicate: (row) => row.Attendance <= attendanceLow,
+      thresholds: attendanceThresholds,
+      bandStyle: numericRiskBandStyle(attendanceThresholds),
+    },
+    {
+      label: "Hores d'estudi",
+      predicate: (row) => row.Hours_Studied <= hoursLow,
+      thresholds: hoursThresholds,
+      bandStyle: numericRiskBandStyle(hoursThresholds),
+    },
+    {
+      label: "Rendiment d'examen",
+      predicate: (row) => row.Exam_Score <= examLow,
+      thresholds: examThresholds,
+      bandStyle: numericRiskBandStyle(examThresholds),
+    },
+    {
+      label: "Notes prèvies",
+      predicate: (row) => row.Previous_Scores <= previousLow,
+      thresholds: previousThresholds,
+      bandStyle: numericRiskBandStyle(previousThresholds),
+    },
+    {
+      label: "Recursos",
+      predicate: (row) => row.Access_to_Resources === "Low",
+      thresholds: [{ position: 33, label: "Low" }, { position: 66, label: "Medium" }],
+      bandStyle: "linear-gradient(90deg, var(--red) 0 33%, var(--amber) 33% 66%, var(--green) 66% 100%)",
+    },
+  ];
+
+  return drivers.map((driver) => {
+    const count = rows.filter(driver.predicate).length;
+    return {
+      label: driver.label,
+      count,
+      percent: percent(count, total),
+      thresholds: driver.thresholds,
+      bandStyle: driver.bandStyle,
+    };
+  }).sort((a, b) => b.percent - a.percent);
+}
+
+function driverPrevalenceClass(percentValue) {
+  if (percentValue >= 35) return "high";
+  if (percentValue >= 18) return "medium";
+  return "low";
+}
+
+function renderDriverRows(drivers) {
+  return drivers.map((driver) => `
+    <div class="driver-row">
+      <div class="driver-meta">
+        <strong>${driver.label}</strong>
+        <span>${driver.percent}% dels estudiants</span>
+      </div>
+      <div class="bar-track risk-scale" style="background:${driver.bandStyle}" aria-label="${driver.label}: ${driver.percent}% dels estudiants">
+        ${driver.thresholds.map((threshold) => `
+          <span class="driver-threshold" style="left:${threshold.position}%"><i>${threshold.label}</i></span>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+function actionCell(count, total, level) {
+  const pct = percent(count, total);
+  return `
+    <div class="action-matrix-cell ${level}">
+      <strong>${formatInt(count)}</strong>
+      <span>${pct}%</span>
+    </div>
+  `;
+}
+
+function renderProfileActionMatrix(rows) {
+  return `
+    <div class="action-matrix">
+      <div class="action-matrix-head">
+        <span>Perfil</span>
+        <span>Intervenció</span>
+        <span>Seguiment</span>
+        <span>Monitorització</span>
+      </div>
+      ${rows.map((row) => `
+        <div class="action-matrix-row">
+          <div class="action-profile">
+            <strong>Perfil ${row.profileId}</strong>
+            <span>${escapeHtml(row.name)}</span>
+            <small>${formatInt(row.total)} alumnes</small>
+          </div>
+          ${actionCell(row.priority, row.total, "high")}
+          ${actionCell(row.preventive, row.total, "medium")}
+          ${actionCell(row.monitoring, row.total, "low")}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderRecommendedActionRows(actions) {
+  const maxCount = Math.max(1, ...actions.map((action) => action.count));
+  return `
+    <div class="recommended-actions">
+      ${actions.map((action) => {
+        const width = Math.max(3, Math.round((action.count / maxCount) * 100));
+        const highWidth = action.count ? Math.round((action.high / action.count) * 100) : 0;
+        const mediumWidth = action.count ? Math.round((action.medium / action.count) * 100) : 0;
+        const lowWidth = Math.max(0, 100 - highWidth - mediumWidth);
+        return `
+          <article class="recommended-action-row">
+            <div class="recommended-action-meta">
+              <strong>${escapeHtml(action.label)}</strong>
+              <span>${action.percent}% dels estudiants</span>
+            </div>
+            <div class="recommended-action-track" aria-label="${escapeHtml(action.label)}: ${action.percent}% dels estudiants">
+              <div class="recommended-action-fill" style="width:${width}%">
+                <span class="high" style="width:${highWidth}%"></span>
+                <span class="medium" style="width:${mediumWidth}%"></span>
+                <span class="low" style="width:${lowWidth}%"></span>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function renderInterventions() {
@@ -1002,14 +1398,20 @@ function renderStudentRows(rows) {
     <tr data-id="${row.id}">
       <td>${row.id}</td>
       <td><span class="pill risk-pill ${row.riskLevel}">${row.riskScore}%</span></td>
-      <td><span class="profile-pill ${profileClass(row.studentProfile)}">${escapeHtml(row.studentProfile?.name || defaultStudentProfile().name)}</span></td>
+      <td><span class="profile-pill ${profileClass(row.studentProfile)}">${escapeHtml(studentProfileLabel(row.studentProfile))}</span></td>
       <td>${row.Motivation_Level}</td>
       <td>${row.Attendance}%</td>
       <td>${row.Hours_Studied}</td>
       <td>${row.Exam_Score}</td>
-      <td>${row.recommendedActions[0][0]}</td>
+      <td>${renderTableAction(row)}</td>
     </tr>
   `).join("");
+}
+
+function renderTableAction(row) {
+  const saved = actionStore.getStudentAction(row.id);
+  if (saved) return renderActionStatusBadge(saved);
+  return escapeHtml(row.recommendedActions[0]?.[0] || "Seguiment ordinari");
 }
 
 function profileClass(profile) {
@@ -1029,8 +1431,8 @@ function sortRows(rows, key, direction) {
 }
 
 function sortValue(row, key) {
-  if (key === "action") return row.recommendedActions[0]?.[0] || "";
-  if (key === "profile") return row.studentProfile?.name || "";
+  if (key === "action") return actionStore.getStudentAction(row.id)?.status || row.recommendedActions[0]?.[0] || "";
+  if (key === "profile") return studentProfileLabel(row.studentProfile);
   return row[key];
 }
 
@@ -1208,6 +1610,76 @@ function renderStudentRiskSignals(row) {
     `;
 }
 
+function reviewPresetFromDate(reviewDate) {
+  const diff = reviewDate ? daysBetweenIso(todayIso(), reviewDate) : 28;
+  if ([14, 28, 56].includes(diff)) return String(diff);
+  return "custom";
+}
+
+function renderActionRegistration(row, forceEdit = false) {
+  const saved = actionStore.getStudentAction(row.id);
+  if (saved && !forceEdit) {
+    return `
+      <section class="action-register saved">
+        <div class="panel-head compact-head">
+          <div>
+            <p class="panel-label">Intervenció registrada</p>
+            <h3>${escapeHtml(saved.action)}</h3>
+          </div>
+          ${renderActionStatusBadge(saved)}
+        </div>
+        <div class="action-state-grid">
+          <span><strong>Aplicada</strong>${escapeHtml(saved.appliedDate)}</span>
+          <span><strong>Revisió</strong>${escapeHtml(saved.reviewDate || "Sense data")}</span>
+        </div>
+        ${saved.notes ? `<p class="teacher-notes">${escapeHtml(saved.notes)}</p>` : ""}
+        <div class="decision-tools">
+          <button class="text-button" type="button" data-action-edit="${escapeHtml(row.id)}">Editar</button>
+          <button class="text-button secondary" type="button" data-action-reviewed="${escapeHtml(row.id)}">Marcar com revisat</button>
+        </div>
+      </section>
+    `;
+  }
+
+  const initialAction = saved?.action || row.recommendedActions?.[0]?.[0] || "Seguiment ordinari";
+  const reviewDate = saved?.reviewDate || addDaysIso(28);
+  const preset = reviewPresetFromDate(reviewDate);
+  return `
+    <section class="action-register">
+      <p class="panel-label">Registrar intervenció</p>
+      <h3>Aplicar acció i programar revisió</h3>
+      <div class="action-register-form" data-student-action-form="${escapeHtml(row.id)}">
+        <label>
+          <span>Acció</span>
+          <select data-action-field="action">
+            ${(row.recommendedActions || [["Seguiment ordinari", ""]]).map(([title]) => `
+              <option value="${escapeHtml(title)}" ${title === initialAction ? "selected" : ""}>${escapeHtml(title)}</option>
+            `).join("")}
+          </select>
+        </label>
+        <label>
+          <span>Revisió</span>
+          <select data-action-field="preset">
+            <option value="14" ${preset === "14" ? "selected" : ""}>2 setmanes</option>
+            <option value="28" ${preset === "28" ? "selected" : ""}>4 setmanes</option>
+            <option value="56" ${preset === "56" ? "selected" : ""}>8 setmanes</option>
+            <option value="custom" ${preset === "custom" ? "selected" : ""}>Personalitzat</option>
+          </select>
+        </label>
+        <label>
+          <span>Data de revisió</span>
+          <input type="date" data-action-field="reviewDate" value="${escapeHtml(reviewDate)}" />
+        </label>
+        <label class="notes-field">
+          <span>Notes del professor</span>
+          <textarea data-action-field="notes" maxlength="300" placeholder="Opcional, màxim 300 caràcters">${escapeHtml(saved?.notes || "")}</textarea>
+        </label>
+        <button class="text-button primary-action" type="button" data-action-save="${escapeHtml(row.id)}">Aplicar i programar revisió</button>
+      </div>
+    </section>
+  `;
+}
+
 function renderStudentExplanation(row, options = {}) {
   const title = clientFacingText(options.title || studentRiskTitle(row));
   const note = options.note || "";
@@ -1216,6 +1688,9 @@ function renderStudentExplanation(row, options = {}) {
       <button class="text-button" type="button" data-simulate-id="${escapeHtml(row.id)}">Simular aquest alumne</button>
     </div>
   `;
+  const registration = options.hideDecisionTools || !String(row.id).startsWith("STU-")
+    ? ""
+    : renderActionRegistration(row, state.editingActions.has(row.id));
   return `
     <div class="detail-score">
       <div class="score-badge" style="background:${riskColor(row.riskLevel, 1)}">${row.riskScore}%</div>
@@ -1234,22 +1709,35 @@ function renderStudentExplanation(row, options = {}) {
     <div class="action-list">
       ${row.recommendedActions.map(([title, text]) => `<div class="action-chip"><strong>${title}</strong><span>${text}</span></div>`).join("")}
     </div>
+    ${registration}
   `;
 }
 
 function renderStudentProfile(row) {
   const profile = row.studentProfile || defaultStudentProfile();
+  const characteristics = profile.characteristics.map(profileCharacteristicText);
   return `
     <section class="profile-card ${profileClass(profile)}">
       <p class="panel-label">Perfil de seguiment</p>
-      <h3>${escapeHtml(profile.name)}</h3>
+      <h3>${escapeHtml(studentProfileLabel(profile))}</h3>
       <p>${escapeHtml(profile.summary)}</p>
       <div class="profile-tags">
-        ${profile.characteristics.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+        ${characteristics.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
       </div>
       <strong>${escapeHtml(profile.recommendation)}</strong>
     </section>
   `;
+}
+
+function profileCharacteristicText(text) {
+  const value = cleanCatalanText(text);
+  if (value.includes("aTLP") || value.toLowerCase().includes("coherència interna")) {
+    return "Perfil força consistent dins del grup d'alumnes";
+  }
+  if (value.toLowerCase().includes("heterogeneïtat interna")) {
+    return "Alguns alumnes del grup poden tenir necessitats diferents";
+  }
+  return value;
 }
 
 function renderInterventionTimeline(row) {
@@ -1734,6 +2222,12 @@ els.table.addEventListener("click", (event) => {
   const row = state.rows.find((item) => item.id === rowEl.dataset.id);
   if (row) renderDetail(row);
 });
+
+els.drivers.addEventListener("click", (event) => {
+  const agendaButton = event.target.closest("[data-agenda-id]");
+  if (!agendaButton) return;
+  openStudentFromAgenda(agendaButton.dataset.agendaId);
+});
 if (els.validationTable) {
   els.validationTable.addEventListener("click", (event) => {
     const rowEl = event.target.closest("tr");
@@ -1743,13 +2237,82 @@ if (els.validationTable) {
   });
 }
 
+function updateReviewBadge() {
+  if (!els.reviewBadge) return;
+  const due = actionStore.getAllPendingReviews().filter((action) => action.status === "a_revisar").length;
+  els.reviewBadge.textContent = String(due);
+  els.reviewBadge.classList.toggle("hidden", due === 0);
+}
+
+function rerenderActionSurfaces(row) {
+  updateReviewBadge();
+  renderDrivers();
+  renderTable();
+  if (row) renderDetail(row);
+}
+
+function saveActionFromForm(studentId, container) {
+  const action = container.querySelector('[data-action-field="action"]')?.value || "Seguiment ordinari";
+  const reviewDate = container.querySelector('[data-action-field="reviewDate"]')?.value || addDaysIso(28);
+  const notes = (container.querySelector('[data-action-field="notes"]')?.value || "").slice(0, 300);
+  actionStore.saveStudentAction(studentId, {
+    action,
+    appliedDate: todayIso(),
+    reviewDate,
+    status: "en_seguiment",
+    notes,
+  });
+  state.editingActions.delete(studentId);
+}
+
+function openStudentFromAgenda(studentId) {
+  const row = state.rows.find((item) => item.id === studentId);
+  if (!row) return;
+  setView("students");
+  renderDetail(row);
+}
+
 els.detail.addEventListener("click", (event) => {
   const simulateButton = event.target.closest("[data-simulate-id]");
-  const id = simulateButton?.dataset.simulateId;
-  if (!id) return;
-  const row = state.rows.find((item) => item.id === id);
-  if (!row) return;
-  if (simulateButton) loadStudentIntoSimulator(row);
+  if (simulateButton) {
+    const id = simulateButton.dataset.simulateId;
+    const row = state.rows.find((item) => item.id === id);
+    if (row) loadStudentIntoSimulator(row);
+    return;
+  }
+  const editButton = event.target.closest("[data-action-edit]");
+  if (editButton) {
+    const row = state.rows.find((item) => item.id === editButton.dataset.actionEdit);
+    if (!row) return;
+    state.editingActions.add(row.id);
+    renderDetail(row);
+    return;
+  }
+  const reviewButton = event.target.closest("[data-action-reviewed]");
+  if (reviewButton) {
+    const row = state.rows.find((item) => item.id === reviewButton.dataset.actionReviewed);
+    if (!row) return;
+    actionStore.markAsReviewed(row.id);
+    state.editingActions.delete(row.id);
+    rerenderActionSurfaces(row);
+    return;
+  }
+  const saveButton = event.target.closest("[data-action-save]");
+  if (saveButton) {
+    const row = state.rows.find((item) => item.id === saveButton.dataset.actionSave);
+    const form = event.target.closest("[data-student-action-form]");
+    if (!row || !form) return;
+    saveActionFromForm(row.id, form);
+    rerenderActionSurfaces(row);
+  }
+});
+
+els.detail.addEventListener("change", (event) => {
+  const preset = event.target.closest('[data-action-field="preset"]');
+  if (!preset || preset.value === "custom") return;
+  const form = preset.closest("[data-student-action-form]");
+  const dateInput = form?.querySelector('[data-action-field="reviewDate"]');
+  if (dateInput) dateInput.value = addDaysIso(Number(preset.value));
 });
 if (els.validationDetail) {
   els.validationDetail.addEventListener("click", (event) => {
@@ -1772,6 +2335,10 @@ if (els.validationDetail) {
 
 window.dashboardTestApi = {
   buildCaseReport,
+  buildClusterRiskMatrix,
+  buildAgendaSummary,
+  buildProfileActionMatrix,
+  buildRecommendedActionRows,
   buildDriverRows,
   buildInterventionSegments,
   buildInterventionTimeline,
@@ -1787,7 +2354,9 @@ window.dashboardTestApi = {
   parseStudentProfiles,
   readableImpactFactors,
   renderDriverRows,
+  renderAgendaSummary,
   renderFactorExplanation,
+  renderActionRegistration,
   renderStudentProfile,
   renderStudentExplanation,
   renderStudentRows,

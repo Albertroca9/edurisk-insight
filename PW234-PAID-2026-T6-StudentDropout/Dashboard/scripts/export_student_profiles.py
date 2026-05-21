@@ -15,6 +15,70 @@ OUTPUT_PATH = PROJECT_ROOT / "Dashboard" / "data" / "student_profiles.csv"
 VALIDATION_OUTPUT_PATH = PROJECT_ROOT / "Dashboard" / "data" / "validation_profiles.csv"
 MODEL_OUTPUT_PATH = PROJECT_ROOT / "Dashboard" / "data" / "student_profile_model.json"
 N_CLUSTERS = 4
+RAW_TO_REPORT_CLUSTER_ID = {
+    4: 1,
+    1: 2,
+    2: 3,
+    3: 4,
+}
+
+OFFICIAL_CLUSTER_PROFILES = {
+    1: {
+        "profile_name": "Perfil favorable i relativament homogeni",
+        "profile_summary": "Predomini de valors favorables i baixa tendència a l'abandonament.",
+        "profile_characteristics": [
+            "Variabilitat moderada a l'aTLP, amb certa heterogeneïtat interna",
+            "Grup estable que requereix principalment seguiment general",
+            "Menor risc educatiu global",
+        ],
+        "profile_recommendation": "Seguiment general del grup estable.",
+    },
+    2: {
+        "profile_name": "Perfil de risc alt i homogeni",
+        "profile_summary": "Concentració de valors desfavorables en variables acadèmiques clau.",
+        "profile_characteristics": [
+            "Alta coherència interna segons els resultats de l'aTLP",
+            "Major probabilitat d'abandonament i baix rendiment acadèmic",
+            "Grup prioritari d'intervenció",
+        ],
+        "profile_recommendation": "Intervenció prioritària i seguiment proper.",
+    },
+    3: {
+        "profile_name": "Perfil intermig amb factors de risc",
+        "profile_summary": "Combinació de factors protectors i elements de risc acadèmic.",
+        "profile_characteristics": [
+            "Variabilitat moderada amb comportaments menys estables",
+            "Requereix seguiment específic per possibles casos de risc",
+            "Perfil acadèmic intermig",
+        ],
+        "profile_recommendation": "Seguiment específic dels casos amb senyals de risc.",
+    },
+    4: {
+        "profile_name": "Perfil intermig amb debilitats estructurals",
+        "profile_summary": "Predomini de valors neutres amb alguns factors desfavorables.",
+        "profile_characteristics": [
+            "Perfil relativament equilibrat però amb certes debilitats",
+            "Pot presentar dificultats acadèmiques en casos concrets",
+            "Risc moderat i seguiment preventiu",
+        ],
+        "profile_recommendation": "Seguiment preventiu i revisió de dificultats concretes.",
+    },
+}
+
+
+def official_cluster_profile(cluster_id: int) -> dict[str, object]:
+    profile = OFFICIAL_CLUSTER_PROFILES[int(cluster_id)]
+    return {
+        "profile_id": int(cluster_id),
+        "profile_name": profile["profile_name"],
+        "profile_summary": profile["profile_summary"],
+        "profile_characteristics": list(profile["profile_characteristics"]),
+        "profile_recommendation": profile["profile_recommendation"],
+    }
+
+
+def report_cluster_ids(raw_clusters: pd.Series) -> pd.Series:
+    return raw_clusters.map(RAW_TO_REPORT_CLUSTER_ID).astype(int)
 
 
 def numeric_clustering_columns(df: pd.DataFrame) -> list[str]:
@@ -99,14 +163,9 @@ def cluster_recommendation(cluster_df: pd.DataFrame, all_df: pd.DataFrame) -> st
 
 
 def profile_metadata(df: pd.DataFrame, clusters: pd.Series) -> dict[int, dict[str, object]]:
-    grouped = {cluster_id: df.loc[clusters == cluster_id] for cluster_id in sorted(clusters.unique())}
     return {
-        int(cluster_id): {
-            "summary": cluster_summary(int(cluster_id), cluster_df),
-            "characteristics": cluster_characteristics(cluster_df, df),
-            "recommendation": cluster_recommendation(cluster_df, df),
-        }
-        for cluster_id, cluster_df in grouped.items()
+        int(cluster_id): official_cluster_profile(int(cluster_id))
+        for cluster_id in sorted(clusters.unique())
     }
 
 
@@ -128,13 +187,7 @@ def clustering_metadata(df: pd.DataFrame, clusters: pd.Series) -> dict[str, obje
         "stds": stds,
         "centroids": centroids,
         "profiles": {
-            str(cluster_id): {
-                "profile_id": int(cluster_id),
-                "profile_name": f"Perfil d'alumne {int(cluster_id)}",
-                "profile_summary": data["summary"],
-                "profile_characteristics": data["characteristics"],
-                "profile_recommendation": data["recommendation"],
-            }
+            str(cluster_id): data
             for cluster_id, data in metadata.items()
         },
     }
@@ -162,14 +215,7 @@ def build_profile_rows(
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     if metadata is None:
-        profile_data = {
-            str(cluster_id): {
-                "profile_summary": data["summary"],
-                "profile_characteristics": data["characteristics"],
-                "profile_recommendation": data["recommendation"],
-            }
-            for cluster_id, data in profile_metadata(df, clusters).items()
-        }
+        profile_data = {str(cluster_id): data for cluster_id, data in profile_metadata(df, clusters).items()}
     else:
         profile_data = metadata["profiles"]
 
@@ -181,7 +227,7 @@ def build_profile_rows(
             {
                 "id": f"{id_prefix}-{idx:04d}",
                 "profile_id": cluster_id,
-                "profile_name": f"Perfil d'alumne {cluster_id}",
+                "profile_name": profile.get("profile_name", f"Perfil d'alumne {cluster_id}"),
                 "profile_summary": profile.get("profile_summary", profile.get("summary", "")),
                 "profile_characteristics": "|".join(characteristics) if isinstance(characteristics, list) else characteristics,
                 "profile_recommendation": profile.get("profile_recommendation", profile.get("recommendation", "")),
@@ -192,7 +238,8 @@ def build_profile_rows(
 
 def main() -> None:
     df = pd.read_csv(DATA_PATH)
-    clusters = ward_clusters(df)
+    raw_clusters = ward_clusters(df)
+    clusters = report_cluster_ids(raw_clusters)
     metadata = clustering_metadata(df, clusters)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(build_profile_rows(df, clusters, metadata=metadata)).to_csv(OUTPUT_PATH, index=False)

@@ -25,6 +25,7 @@
           <button class="nav-item" data-view="students" title="Llista prioritzada">
             <span class="icon">≡</span>
             <span>Estudiants</span>
+            <span id="student-review-badge" class="nav-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="validation" title="Validació">
             <span class="icon">✓</span>
@@ -97,22 +98,22 @@
               <div class="panel-head">
                 <div>
                   <p class="panel-label">Priorització docent</p>
-                  <h3>Grups prioritaris d'intervenció</h3>
+                  <h3>Perfils d'estudiant per nivell de risc</h3>
                 </div>
                 <span class="legend"><i class="risk-dot high"></i> prioritat alta <i class="risk-dot med"></i> seguiment <i class="risk-dot low"></i> monitorització</span>
               </div>
-              <canvas id="scatter-chart" width="960" height="500" aria-label="Priorització docent per segments d'intervenció"></canvas>
-              <p class="explain-text">Cada fila agrupa estudiants que comparteixen una causa accionable. El text sota el nom indica la intervenció recomanada; el color mostra si el grup concentra casos de prioritat alta, seguiment preventiu o monitorització.</p>
+              <canvas id="scatter-chart" width="960" height="500" aria-label="Perfils d'estudiant per nivell de risc"></canvas>
+              <p class="explain-text">Cada fila correspon a un perfil d'estudiant i cada columna mostra quants alumnes cauen en risc alt, mitjà o baix.</p>
             </article>
 
             <article class="panel">
               <div class="panel-head">
                 <div>
-                  <p class="panel-label">Causes principals</p>
-                  <h3>Senyals de risc més freqüents</h3>
+                  <p class="panel-label">Agenda docent</p>
+                  <h3>Agenda de seguiment</h3>
                 </div>
               </div>
-              <p class="explain-text compact">El percentatge indica quants estudiants de la cohort presenten cada condició.</p>
+              <p class="explain-text compact">Revisions programades a partir de les intervencions registrades a la fitxa de cada alumne.</p>
               <div id="driver-bars" class="driver-bars"></div>
             </article>
           </div>
@@ -325,6 +326,7 @@
         </section>
       </section>
     </main>
-    <script src="app.js?v=20260518-8"></script>
+    <script src="actions_store.js?v=20260520-1"></script>
+    <script src="app.js?v=20260520-1"></script>
   </body>
 </html>

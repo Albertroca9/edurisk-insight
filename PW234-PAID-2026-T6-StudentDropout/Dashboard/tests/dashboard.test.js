@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-function loadDashboardApi() {
+function loadDashboardApi(options = {}) {
   const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
   const noop = () => {};
   const canvas = {
@@ -48,12 +48,47 @@ function loadDashboardApi() {
     fetch: () => Promise.reject(new Error("test fetch disabled")),
     Intl,
     Math,
-    window: {},
+    window: options.window || {},
   };
   vm.createContext(context);
   vm.runInContext(source, context);
   return context.window.dashboardTestApi;
 }
+
+function loadActionStore() {
+  const source = fs.readFileSync(path.join(__dirname, "..", "actions_store.js"), "utf8");
+  const storage = new Map();
+  const context = {
+    Date,
+    JSON,
+    window: {
+      localStorage: {
+        getItem: (key) => storage.get(key) || null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  return context.window.ActionStore;
+}
+
+test("ActionStore persists student interventions in localStorage", () => {
+  const store = loadActionStore();
+
+  store.saveStudentAction("STU-0030", {
+    action: "Tutoria motivacional",
+    appliedDate: "2026-05-20",
+    reviewDate: "2026-06-17",
+    status: "en_seguiment",
+    notes: "Contactar tutor.",
+  });
+
+  assert.equal(store.getStudentAction("STU-0030").action, "Tutoria motivacional");
+  assert.equal(store.getAllPendingReviews().length, 1);
+  store.markAsReviewed("STU-0030");
+  assert.equal(store.getStudentAction("STU-0030").status, "tancat");
+});
 
 test("buildInterventionSegments groups students into teacher action segments", () => {
   const { buildInterventionSegments } = loadDashboardApi();
@@ -124,6 +159,184 @@ test("renderFactorExplanation uses client-friendly labels instead of internal im
   assert.equal(html.includes("Factor protector"), false);
   assert.equal(html.includes("+"), false);
   assert.equal(html.includes("impact-track"), false);
+});
+
+test("buildClusterRiskMatrix counts risk levels inside official cluster profiles", () => {
+  const { buildClusterRiskMatrix } = loadDashboardApi();
+  const rows = [
+    { riskLevel: "high", studentProfile: { profileId: "1", name: "Perfil favorable i relativament homogeni" } },
+    { riskLevel: "medium", studentProfile: { profileId: "1", name: "Perfil favorable i relativament homogeni" } },
+    { riskLevel: "low", studentProfile: { profileId: "2", name: "Perfil de risc alt i homogeni" } },
+    { riskLevel: "high", studentProfile: { profileId: "2", name: "Perfil de risc alt i homogeni" } },
+    { riskLevel: "medium", studentProfile: { profileId: "4", name: "Perfil intermig amb debilitats estructurals" } },
+  ];
+
+  const matrix = buildClusterRiskMatrix(rows);
+
+  assert.equal(matrix.length, 4);
+  assert.equal(matrix[0].profileId, "1");
+  assert.equal(matrix[0].total, 2);
+  assert.equal(matrix[0].high, 1);
+  assert.equal(matrix[0].medium, 1);
+  assert.equal(matrix[0].low, 0);
+  assert.equal(matrix[1].name, "Perfil de risc alt i homogeni");
+  assert.equal(matrix[1].total, 2);
+  assert.equal(matrix[3].medium, 1);
+});
+
+test("buildProfileActionMatrix counts recommended action level by student profile", () => {
+  const { buildProfileActionMatrix } = loadDashboardApi();
+  const rows = [
+    { riskLevel: "high", studentProfile: { profileId: "1", name: "Perfil favorable i relativament homogeni" } },
+    { riskLevel: "medium", studentProfile: { profileId: "1", name: "Perfil favorable i relativament homogeni" } },
+    { riskLevel: "low", studentProfile: { profileId: "1", name: "Perfil favorable i relativament homogeni" } },
+    { riskLevel: "high", studentProfile: { profileId: "2", name: "Perfil de risc alt i homogeni" } },
+  ];
+
+  const matrix = buildProfileActionMatrix(rows);
+
+  assert.equal(matrix.length, 4);
+  assert.equal(matrix[0].profileId, "1");
+  assert.equal(matrix[0].priority, 1);
+  assert.equal(matrix[0].preventive, 1);
+  assert.equal(matrix[0].monitoring, 1);
+  assert.equal(matrix[1].priority, 1);
+});
+
+test("buildRecommendedActionRows ranks teacher actions by affected students", () => {
+  const { buildRecommendedActionRows } = loadDashboardApi();
+  const rows = [
+    { recommendedActions: [["Seguiment d'assistència", ""]], riskLevel: "high" },
+    { recommendedActions: [["Seguiment d'assistència", ""], ["Reforç acadèmic", ""]], riskLevel: "medium" },
+    { recommendedActions: [["Pla d'estudi guiat", ""]], riskLevel: "low" },
+  ];
+
+  const actions = buildRecommendedActionRows(rows);
+
+  assert.equal(actions[0].label, "Seguiment d'assistència");
+  assert.equal(actions[0].count, 2);
+  assert.equal(actions[0].percent, 67);
+  assert.equal(actions[0].high, 1);
+  assert.equal(actions[0].medium, 1);
+  assert.equal(actions[1].count, 1);
+});
+
+test("buildAgendaSummary groups review dates for the teacher agenda", () => {
+  const { buildAgendaSummary, renderAgendaSummary } = loadDashboardApi();
+  const rows = [
+    { id: "STU-0001", riskLevel: "high", riskScore: 91 },
+    { id: "STU-0002", riskLevel: "medium", riskScore: 52 },
+    { id: "STU-0003", riskLevel: "low", riskScore: 8 },
+  ];
+  const actions = [
+    { studentId: "STU-0001", action: "Tutoria motivacional", reviewDate: "2026-05-20", status: "a_revisar" },
+    { studentId: "STU-0002", action: "Seguiment d'assistència", reviewDate: "2026-05-24", status: "en_seguiment" },
+    { studentId: "STU-0003", action: "Reforç acadèmic", reviewDate: "2026-06-20", status: "en_seguiment" },
+  ];
+
+  const summary = buildAgendaSummary(actions, rows, "2026-05-20");
+  const html = renderAgendaSummary(summary);
+
+  assert.equal(summary.urgent.length, 1);
+  assert.equal(summary.week.length, 1);
+  assert.equal(summary.active, 2);
+  assert.equal(html.includes("Agenda"), false);
+  assert.equal(html.includes("STU-0001"), true);
+  assert.equal(html.includes("Avui i urgent"), true);
+  assert.equal(html.includes("En seguiment actiu"), true);
+});
+
+test("renderActionRegistration shows save form and saved state", () => {
+  const mockStore = {
+    saved: null,
+    getStudentAction(id) {
+      return id === "STU-0001" ? this.saved : null;
+    },
+    saveStudentAction: () => null,
+    getAllPendingReviews: () => [],
+    markAsReviewed: () => null,
+  };
+  const api = loadDashboardApi({ window: { ActionStore: mockStore } });
+  const row = {
+    id: "STU-0001",
+    recommendedActions: [["Tutoria motivacional", "Revisió individual"], ["Reforç acadèmic", "Sessions"]],
+  };
+
+  let html = api.renderActionRegistration(row);
+  assert.equal(html.includes("Registrar intervenció"), true);
+  assert.equal(html.includes("2 setmanes"), true);
+  assert.equal(html.includes("maxlength=\"300\""), true);
+
+  mockStore.saved = {
+    studentId: "STU-0001",
+    action: "Tutoria motivacional",
+    appliedDate: "2026-05-20",
+    reviewDate: "2026-06-17",
+    status: "en_seguiment",
+    notes: "Revisar assistència.",
+  };
+  html = api.renderActionRegistration(row);
+  assert.equal(html.includes("Intervenció registrada"), true);
+  assert.equal(html.includes("Marcar com revisat"), true);
+  assert.equal(html.includes("Revisar assistència."), true);
+});
+
+test("driver rows show only student percentage and expose clear risk thresholds", () => {
+  const { buildDriverRows, renderDriverRows } = loadDashboardApi();
+  const rows = [
+    { Motivation_Level: "Low", Attendance: 70, Hours_Studied: 10, Exam_Score: 61, Previous_Scores: 65, Access_to_Resources: "Low" },
+    { Motivation_Level: "High", Attendance: 90, Hours_Studied: 24, Exam_Score: 80, Previous_Scores: 82, Access_to_Resources: "High" },
+  ];
+
+  const drivers = buildDriverRows(rows);
+  const html = renderDriverRows(drivers);
+
+  assert.equal(html.includes("50% dels estudiants"), true);
+  assert.equal(html.includes("2 estudiants"), false);
+  assert.equal(html.includes("Llindar de risc"), false);
+  assert.equal(html.includes("driver-threshold"), true);
+  assert.equal(html.includes(">70<"), true);
+  assert.equal(html.includes(">llindar<"), false);
+  assert.equal(html.includes("bar-fill"), false);
+  assert.equal(html.includes("Assistència"), true);
+  assert.equal(html.includes("Assistència baixa"), false);
+  assert.equal(html.includes("Notes prèvies baixes"), false);
+});
+
+test("numeric driver thresholds are derived from cohort terciles", () => {
+  const { buildDriverRows } = loadDashboardApi();
+  const rows = [
+    { Motivation_Level: "Low", Attendance: 60, Hours_Studied: 4, Exam_Score: 55, Previous_Scores: 50, Access_to_Resources: "Low" },
+    { Motivation_Level: "Medium", Attendance: 70, Hours_Studied: 12, Exam_Score: 62, Previous_Scores: 65, Access_to_Resources: "Medium" },
+    { Motivation_Level: "High", Attendance: 80, Hours_Studied: 20, Exam_Score: 70, Previous_Scores: 80, Access_to_Resources: "High" },
+    { Motivation_Level: "High", Attendance: 90, Hours_Studied: 28, Exam_Score: 82, Previous_Scores: 95, Access_to_Resources: "High" },
+  ];
+
+  const attendance = buildDriverRows(rows).find((driver) => driver.label === "Assistència");
+  const hours = buildDriverRows(rows).find((driver) => driver.label === "Hores d'estudi");
+
+  assert.equal(attendance.thresholds.map((threshold) => threshold.label).join(","), "70,80");
+  assert.equal(attendance.thresholds.map((threshold) => threshold.position).join(","), "33,67");
+  assert.equal(hours.thresholds.map((threshold) => threshold.label).join(","), "12h,20h");
+  assert.equal(hours.thresholds.map((threshold) => threshold.position).join(","), "33,67");
+});
+
+test("driver rows scale to the full dashboard cohort without repeated sorting", () => {
+  const { buildDriverRows } = loadDashboardApi();
+  const rows = Array.from({ length: 6607 }, (_, index) => ({
+    Motivation_Level: index % 3 === 0 ? "Low" : index % 3 === 1 ? "Medium" : "High",
+    Attendance: 60 + (index % 41),
+    Hours_Studied: 1 + (index % 44),
+    Exam_Score: 55 + (index % 46),
+    Previous_Scores: 50 + (index % 51),
+    Access_to_Resources: index % 3 === 0 ? "Low" : index % 3 === 1 ? "Medium" : "High",
+  }));
+  const started = Date.now();
+
+  const drivers = buildDriverRows(rows);
+
+  assert.equal(drivers.length, 6);
+  assert.equal(Date.now() - started < 500, true);
 });
 
 test("student detail explains the case with a direct summary and concrete signals", () => {
@@ -237,6 +450,26 @@ test("parseStudentProfiles and applyStudentProfiles attach readable profile data
   assert.equal(rows[1].studentProfile.name, "Perfil d'alumne no classificat");
 });
 
+test("student profile view hides technical aTLP wording", () => {
+  const { renderStudentProfile } = loadDashboardApi();
+  const html = renderStudentProfile({
+    studentProfile: {
+      profileId: "2",
+      name: "Perfil de risc alt i homogeni",
+      summary: "Concentració de valors desfavorables.",
+      characteristics: [
+        "Alta coherència interna segons els resultats de l'aTLP",
+        "Grup prioritari d'intervenció",
+      ],
+      recommendation: "Intervenció prioritària.",
+    },
+  });
+
+  assert.equal(html.includes("aTLP"), false);
+  assert.equal(html.includes("coherència interna"), false);
+  assert.equal(html.includes("Perfil força consistent dins del grup d&#039;alumnes"), true);
+});
+
 test("estimateStudentProfile assigns the nearest exported profile to a new student", () => {
   const { estimateStudentProfile } = loadDashboardApi();
   const profileModel = {
@@ -289,6 +522,39 @@ test("renderStudentRows returns every filtered student instead of truncating the
 
   assert.equal((html.match(/<tr data-id=/g) || []).length, 260);
   assert.equal(html.includes("STU-0260"), true);
+});
+
+test("student rows use numbered profile labels and saved action badges", () => {
+  const { renderStudentRows } = loadDashboardApi({
+    window: {
+      ActionStore: {
+        getStudentAction: (id) => id === "STU-0001"
+          ? { studentId: id, action: "Tutoria motivacional", status: "a_revisar", reviewDate: "2026-05-20" }
+          : null,
+        saveStudentAction: () => null,
+        getAllPendingReviews: () => [],
+        markAsReviewed: () => null,
+      },
+    },
+  });
+  const html = renderStudentRows([
+    {
+      id: "STU-0001",
+      riskScore: 80,
+      riskLevel: "high",
+      studentProfile: { profileId: "2", name: "Perfil de risc alt i homogeni" },
+      Motivation_Level: "Low",
+      Attendance: 60,
+      Hours_Studied: 8,
+      Exam_Score: 55,
+      recommendedActions: [["Tutoria motivacional", ""]],
+    },
+  ]);
+
+  assert.equal(html.includes("Perfil d&#039;alumne 2"), true);
+  assert.equal(html.includes("Perfil de risc alt i homogeni"), false);
+  assert.equal(html.includes("action-status a_revisar"), true);
+  assert.equal(html.includes("A revisar"), true);
 });
 
 test("student detail title uses abandonment risk wording instead of system prediction wording", () => {

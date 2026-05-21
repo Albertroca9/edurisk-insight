@@ -12,6 +12,29 @@ SPEC.loader.exec_module(profiles)
 
 
 class ExportStudentProfilesTests(unittest.TestCase):
+    def test_official_cluster_profiles_match_presentation_labels(self):
+        expected_names = {
+            1: "Perfil favorable i relativament homogeni",
+            2: "Perfil de risc alt i homogeni",
+            3: "Perfil intermig amb factors de risc",
+            4: "Perfil intermig amb debilitats estructurals",
+        }
+
+        for cluster_id, expected_name in expected_names.items():
+            with self.subTest(cluster_id=cluster_id):
+                profile = profiles.official_cluster_profile(cluster_id)
+                self.assertEqual(profile["profile_name"], expected_name)
+
+        self.assertIn("seguiment general", profiles.official_cluster_profile(1)["profile_recommendation"].lower())
+        self.assertIn("priorit", profiles.official_cluster_profile(2)["profile_recommendation"].lower())
+
+    def test_raw_ward_cluster_ids_are_remapped_to_report_cluster_ids(self):
+        raw_clusters = pd.Series([4, 4, 1, 2, 3])
+
+        official_clusters = profiles.report_cluster_ids(raw_clusters)
+
+        self.assertEqual(official_clusters.tolist(), [1, 1, 2, 3, 4])
+
     def test_numeric_columns_match_r_clustering_input(self):
         df = pd.DataFrame(
             {
@@ -44,8 +67,8 @@ class ExportStudentProfilesTests(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertEqual(rows[0]["id"], "STU-0001")
         self.assertEqual(rows[0]["profile_id"], 2)
-        self.assertEqual(rows[0]["profile_name"], "Perfil d'alumne 2")
-        self.assertIn("Assist", rows[0]["profile_characteristics"])
+        self.assertEqual(rows[0]["profile_name"], "Perfil de risc alt i homogeni")
+        self.assertIn("Grup prioritari d'intervenció", rows[0]["profile_characteristics"])
 
     def test_assign_profiles_to_new_rows_uses_nearest_centroid(self):
         train_df = pd.DataFrame(
