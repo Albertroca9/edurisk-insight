@@ -1,0 +1,13 @@
+{
+  "total_students": 50,
+  "improved": 12,
+  "worsened": 3,
+  "stable": 35,
+  "mean_risk_change": -0.07649454974498796,
+  "median_risk_change": -0.09401733499670639,
+  "avg_baseline_risk": 0.6452581474157436,
+  "avg_followup_risk": 0.5687635976707557,
+  "improvement_rate": 24.0,
+  "deterioration_rate": 6.0,
+  "stability_rate": 70.0
+}
