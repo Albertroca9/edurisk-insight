@@ -362,7 +362,7 @@ function calculateRisk(row) {
   addFactor(factors, "Motivació baixa", row.Motivation_Level === "Low" ? 30 : row.Motivation_Level === "Medium" ? 12 : -10);
   addFactor(factors, "Poques hores d'estudi", scaleDown(row.Hours_Studied, 8, 26, 24));
   addFactor(factors, "Assistència baixa", scaleDown(row.Attendance, 65, 90, 23));
-  addFactor(factors, "Nota d'examen baixa", scaleDown(row.Exam_Score, 58, 76, 20));
+  addFactor(factors, "Nota d'examen baixa", scaleDown(row.Exam_Score, 47, 76, 20));
   addFactor(factors, "Notes prèvies baixes", scaleDown(row.Previous_Scores, 55, 86, 14));
   addFactor(factors, "Sense tutories", row.Tutoring_Sessions === 0 ? 5 : -3);
   addFactor(factors, "Recursos baixos", row.Access_to_Resources === "Low" ? 5 : 0);
@@ -391,7 +391,7 @@ function recommendActions(row) {
   if (row.Motivation_Level === "Low") actions.push(["Tutoria motivacional", "Revisió individual d'objectius i barreres de compromís."]);
   if (row.Attendance < 75) actions.push(["Seguiment d'assistència", "Contacte preventiu i pauta setmanal de presència a classe."]);
   if (row.Hours_Studied < 15) actions.push(["Pla d'estudi guiat", "Franges concretes d'estudi i revisió de progrés cada dues setmanes."]);
-  if (row.Exam_Score < 64 || row.Previous_Scores < 68) actions.push(["Reforç acadèmic", "Sessions focalitzades en les competències amb pitjor rendiment."]);
+  if (row.Exam_Score < 60 || row.Previous_Scores < 68) actions.push(["Reforç acadèmic", "Sessions focalitzades en les competències amb pitjor rendiment."]);
   if (row.Access_to_Resources === "Low") actions.push(["Recursos educatius", "Prioritzar materials, espais d'estudi o suport digital."]);
   if (!actions.length) actions.push(["Seguiment ordinari", "Mantenir observació i revisar evolució en el pròxim cicle."]);
   return actions.slice(0, 4);
@@ -559,7 +559,7 @@ function buildInterventionSegments(rows) {
       label: "Baix rendiment acadèmic",
       action: "Intervenció: reforç acadèmic",
       help: "Grup d'alumnes amb notes actuals o prèvies que apunten a dificultats acadèmiques.",
-      test: (row) => row.Exam_Score < 64 || row.Previous_Scores < 68,
+      test: (row) => row.Exam_Score < 60 || row.Previous_Scores < 68,
     },
     {
       key: "low-motivation",
@@ -942,7 +942,7 @@ function factorExplanationText(factor) {
   if (label.includes("nota d'examen")) {
     const valueText = value === null ? "Nota d'examen registrada" : `Nota d'examen de ${value}`;
     if (!increasesRisk) return `${valueText}: ${lead}.`;
-    return `${valueText}: ${lead} perquè queda per sota del llindar de reforç acadèmic de 64 punts.`;
+    return `${valueText}: ${lead} perquè queda per sota del llindar crític de 47 punts.`;
   }
   if (label.includes("notes pr")) {
     const valueText = value === null ? "Notes prèvies registrades" : `Notes prèvies de ${value}`;
@@ -1117,7 +1117,7 @@ function renderDriversLegacyUnused() {
     ["Motivació baixa", ratio(rows, (r) => r.Motivation_Level === "Low")],
     ["Assistència < 75%", ratio(rows, (r) => r.Attendance < 75)],
     ["Hores estudi < 15", ratio(rows, (r) => r.Hours_Studied < 15)],
-    ["Exam score < 64", ratio(rows, (r) => r.Exam_Score < 64)],
+    ["Exam score < 47", ratio(rows, (r) => r.Exam_Score < 47)],
     ["Notes prèvies < 68", ratio(rows, (r) => r.Previous_Scores < 68)],
     ["Recursos baixos", ratio(rows, (r) => r.Access_to_Resources === "Low")],
   ].sort((a, b) => b[1] - a[1]);
@@ -1136,7 +1136,7 @@ function buildDriverRowsLegacyUnused(rows) {
     ["Motivació baixa", "Llindar de risc: motivació marcada com a Low", (row) => row.Motivation_Level === "Low"],
     ["Assistència baixa", "Llindar de risc: menys del 75% d'assistència", (row) => row.Attendance < 75],
     ["Poques hores d'estudi", "Llindar de risc: menys de 15 hores setmanals", (row) => row.Hours_Studied < 15],
-    ["Rendiment d'examen baix", "Llindar de risc: nota d'examen inferior a 64", (row) => row.Exam_Score < 64],
+    ["Rendiment d'examen baix", "Llindar de risc: nota d'examen inferior a 47", (row) => row.Exam_Score < 47],
     ["Notes prèvies baixes", "Llindar de risc: notes prèvies inferiors a 68", (row) => row.Previous_Scores < 68],
     ["Recursos baixos", "Llindar de risc: accés a recursos marcat com a Low", (row) => row.Access_to_Resources === "Low"],
   ];
@@ -1548,7 +1548,7 @@ function studentRiskSignalThreshold(factor) {
   if (label.includes("assist")) return "< 75%";
   if (label.includes("motiv")) return "Baixa";
   if (label.includes("hores d'estudi")) return "< 15 h";
-  if (label.includes("nota d'examen")) return "< 64";
+  if (label.includes("nota d'examen")) return "< 47";
   if (label.includes("notes pr")) return "< 68";
   if (label.includes("tutories")) return "0 tutories";
   if (label.includes("recursos")) return "Baixos";
@@ -1559,6 +1559,11 @@ function studentRiskSignalThreshold(factor) {
 
 function studentRiskSignalReading(factor) {
   const magnitude = Math.abs(factor.impact);
+  const label = factor.label.toLowerCase();
+  const numericValue = Number(factor.displayValue);
+  if (label.includes("nota d'examen") && Number.isFinite(numericValue) && numericValue >= 47) {
+    return magnitude >= 8 ? "Atenció" : "Baix";
+  }
   if (magnitude >= 20) return "Crític";
   if (magnitude >= 8) return "Atenció";
   return "Baix";

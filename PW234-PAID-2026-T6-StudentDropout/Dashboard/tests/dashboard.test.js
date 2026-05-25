@@ -409,6 +409,84 @@ test("student detail shows risk factors as a quick value and threshold table", (
   assert.equal(html.includes("Low"), false);
 });
 
+test("student exam threshold uses below 47 as the critical reference", () => {
+  const { renderStudentExplanation } = loadDashboardApi();
+  const html = renderStudentExplanation({
+    id: "STU-0001",
+    riskScore: 84,
+    riskLevel: "high",
+    Motivation_Level: "Medium",
+    Attendance: 82,
+    Hours_Studied: 18,
+    Exam_Score: 46,
+    Previous_Scores: 72,
+    riskFactors: [
+      { feature: "Exam_Score", label: "Exam Score", value: 46, impact: 24 },
+    ],
+    recommendedActions: [["Reforç acadèmic", "Sessions focalitzades."]],
+    studentProfile: {
+      name: "Perfil de risc",
+      summary: "Baix rendiment",
+      characteristics: ["Nota d'examen baixa"],
+      recommendation: "Seguiment",
+    },
+  });
+
+  assert.equal(html.includes("&lt; 47"), true);
+  assert.equal(html.includes("&lt; 64"), false);
+});
+
+test("academic reinforcement is recommended for exam scores below 60 without changing the critical threshold", () => {
+  const { evaluateNewStudent } = loadDashboardApi();
+
+  const nonCriticalExam = evaluateNewStudent({
+    id: "NOU-001",
+    Motivation_Level: "High",
+    Attendance: 90,
+    Hours_Studied: 20,
+    Previous_Scores: 75,
+    Exam_Score: 50,
+    Tutoring_Sessions: 1,
+    Access_to_Resources: "Medium",
+  });
+  const criticalExam = evaluateNewStudent({
+    ...nonCriticalExam,
+    Exam_Score: 46,
+  });
+
+  assert.equal(nonCriticalExam.recommendedActions.some(([title]) => title === "Reforç acadèmic"), true);
+  assert.equal(nonCriticalExam.riskFactors.some((factor) => factor.label === "Nota d'examen baixa" && factor.impact >= 20), false);
+  assert.equal(criticalExam.recommendedActions.some(([title]) => title === "Reforç acadèmic"), true);
+});
+
+test("exam scores above the critical threshold are not labelled critical in student detail", () => {
+  const { renderStudentExplanation } = loadDashboardApi();
+  const html = renderStudentExplanation({
+    id: "STU-0001",
+    riskScore: 72,
+    riskLevel: "high",
+    Motivation_Level: "Medium",
+    Attendance: 82,
+    Hours_Studied: 18,
+    Exam_Score: 50,
+    Previous_Scores: 75,
+    riskFactors: [
+      { feature: "Exam_Score", label: "Exam Score", value: 50, impact: 24 },
+    ],
+    recommendedActions: [["Reforç acadèmic", "Sessions focalitzades."]],
+    studentProfile: {
+      name: "Perfil de seguiment",
+      summary: "Seguiment preventiu",
+      characteristics: ["Nota d'examen en seguiment"],
+      recommendation: "Revisar evolució.",
+    },
+  });
+
+  assert.equal(html.includes("&lt; 47"), true);
+  assert.equal(html.includes("Crític"), false);
+  assert.equal(html.includes("Atenció"), true);
+});
+
 test("cleanCatalanText fixes common missing accents and mojibake", () => {
   const { cleanCatalanText } = loadDashboardApi();
 
