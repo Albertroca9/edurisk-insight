@@ -582,6 +582,38 @@ test("estimateStudentProfile assigns the nearest exported profile to a new stude
   assert.equal(profile.summary, "Baixa assistencia");
 });
 
+test("estimateStudentProfile can assign favorable new students to profile 1 with the exported model", () => {
+  const { estimateStudentProfile } = loadDashboardApi();
+  const profileModel = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "student_profile_model.json"), "utf8"));
+
+  const profile = estimateStudentProfile({
+    Attendance: 100,
+    Hours_Studied: 60,
+    Previous_Scores: 100,
+    Exam_Score: 100,
+    Tutoring_Sessions: 10,
+    Access_to_Resources: "High",
+  }, profileModel);
+
+  assert.equal(profile.profileId, "1");
+});
+
+test("estimateStudentProfile can assign clearly unfavorable new students to profile 2 with the exported model", () => {
+  const { estimateStudentProfile } = loadDashboardApi();
+  const profileModel = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "student_profile_model.json"), "utf8"));
+
+  const profile = estimateStudentProfile({
+    Attendance: 40,
+    Hours_Studied: 1,
+    Previous_Scores: 20,
+    Exam_Score: 20,
+    Tutoring_Sessions: 0,
+    Access_to_Resources: "Low",
+  }, profileModel);
+
+  assert.equal(profile.profileId, "2");
+});
+
 test("renderStudentRows returns every filtered student instead of truncating the table", () => {
   const { renderStudentRows } = loadDashboardApi();
   const rows = Array.from({ length: 260 }, (_, index) => ({
@@ -732,6 +764,32 @@ test("evaluateNewStudent calculates risk factors and recommended actions from fo
   assert.equal(result.riskFactors.some((factor) => factor.label === "Motivació baixa"), true);
   assert.equal(result.recommendedActions.some(([title]) => title === "Tutoria motivacional"), true);
   assert.equal(result.recommendedActions.some(([title]) => title === "Seguiment d'assistència"), true);
+});
+
+test("evaluateNewStudent keeps every exported profile model variable from the form", () => {
+  const { evaluateNewStudent } = loadDashboardApi();
+
+  const result = evaluateNewStudent({
+    id: "NOU-002",
+    Motivation_Level: "High",
+    Hours_Studied: 32,
+    Attendance: 96,
+    Extracurricular_Activities: 1,
+    Sleep_Hours: 8,
+    Previous_Scores: 92,
+    Internet_Access: 1,
+    Tutoring_Sessions: 3,
+    Physical_Activity: 4,
+    Learning_Disabilities: 0,
+    Exam_Score: 88,
+    Access_to_Resources: "High",
+  });
+
+  assert.equal(result.Extracurricular_Activities, 1);
+  assert.equal(result.Sleep_Hours, 8);
+  assert.equal(result.Internet_Access, 1);
+  assert.equal(result.Physical_Activity, 4);
+  assert.equal(result.Learning_Disabilities, 0);
 });
 test("buildSimulationCase compares a concrete student with simulated values", () => {
   const { buildSimulationCase } = loadDashboardApi();

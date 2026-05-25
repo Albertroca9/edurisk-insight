@@ -77,6 +77,11 @@ const els = {
   newExam: document.querySelector("#new-exam"),
   newTutoring: document.querySelector("#new-tutoring"),
   newResources: document.querySelector("#new-resources"),
+  newExtracurricular: document.querySelector("#new-extracurricular"),
+  newSleep: document.querySelector("#new-sleep"),
+  newInternet: document.querySelector("#new-internet"),
+  newPhysical: document.querySelector("#new-physical"),
+  newLearning: document.querySelector("#new-learning"),
   newResultTitle: document.querySelector("#new-result-title"),
   newResult: document.querySelector("#new-student-result"),
   validationSearch: document.querySelector("#validation-search"),
@@ -221,6 +226,14 @@ function profileFromModelEntry(entry) {
   };
 }
 
+function profileModelColumnValue(row, column, profileModel) {
+  if (row[column] !== undefined && row[column] !== "") return Number(row[column]);
+  if (column === "Internet_Access" && row.Access_to_Resources !== undefined) {
+    return row.Access_to_Resources === "Low" ? 0 : 1;
+  }
+  return Number(profileModel.means[column] || 0);
+}
+
 function estimateStudentProfile(row, profileModel = state.profileModel) {
   if (!profileModel) return defaultStudentProfile();
   let bestProfileId = "";
@@ -230,7 +243,7 @@ function estimateStudentProfile(row, profileModel = state.profileModel) {
   });
   Object.entries(profileModel.centroids).forEach(([profileId, centroid]) => {
     const distance = profileModel.columns.reduce((sum, column) => {
-      const value = Number(row[column] ?? 0);
+      const value = profileModelColumnValue(row, column, profileModel);
       const scaled = (value - Number(profileModel.means[column] || 0)) / Number(profileModel.stds[column] || 1);
       const diff = scaled - Number(centroid[column] || 0);
       return sum + diff * diff;
@@ -498,6 +511,11 @@ function evaluateNewStudent(values) {
     Exam_Score: Number(values.Exam_Score),
     Tutoring_Sessions: Number(values.Tutoring_Sessions),
     Access_to_Resources: values.Access_to_Resources,
+    Extracurricular_Activities: Number(values.Extracurricular_Activities),
+    Sleep_Hours: Number(values.Sleep_Hours),
+    Internet_Access: Number(values.Internet_Access),
+    Physical_Activity: Number(values.Physical_Activity),
+    Learning_Disabilities: Number(values.Learning_Disabilities),
     dropout: 0,
   };
   const risk = calculateRisk(row);
@@ -2026,6 +2044,11 @@ function renderNewStudent() {
     Exam_Score: els.newExam.value,
     Tutoring_Sessions: els.newTutoring.value,
     Access_to_Resources: els.newResources.value,
+    Extracurricular_Activities: els.newExtracurricular.value,
+    Sleep_Hours: els.newSleep.value,
+    Internet_Access: els.newInternet.value,
+    Physical_Activity: els.newPhysical.value,
+    Learning_Disabilities: els.newLearning.value,
   });
   els.newResultTitle.textContent = row.id;
   els.newResult.innerHTML = renderStudentExplanation(row, {
@@ -2334,7 +2357,7 @@ if (els.validationDetail) {
   input.addEventListener("input", renderSimulator);
 });
 
-[els.newId, els.newMotivation, els.newAttendance, els.newHours, els.newPrevious, els.newExam, els.newTutoring, els.newResources].forEach((input) => {
+[els.newId, els.newMotivation, els.newAttendance, els.newHours, els.newPrevious, els.newExam, els.newTutoring, els.newResources, els.newExtracurricular, els.newSleep, els.newInternet, els.newPhysical, els.newLearning].forEach((input) => {
   input.addEventListener("input", renderNewStudent);
 });
 
